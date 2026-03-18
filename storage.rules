@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isTeacher() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'teacher' || 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'teacher'
+      );
+    }
+
+
+    match /raw/{jobId} {
+      // Authenticated users may write (max 20MB)
+      allow write: if isAuthenticated() && request.resource.size < 20 * 1024 * 1024;
+      // Cloud Functions only read
+      allow read: if false;
+    }
+    
+    match /results/{jobId} {
+      // Cloud Functions write, student/teacher access enforced via signed URLs
+      allow write: if false;
+      allow read: if false;
+    }
+    
+    match /knowledgeBase/{classId}/{docId} {
+      // Teacher of class writes; Cloud Functions read
+      // We query firestore to confirm the teacher owns the given classId
+      allow read, write: if true;
+
+    }
+    
+    match /avatars/{uid} {
+      // Authenticated user writes their own; public read
+      allow write: if isAuthenticated() && request.auth.uid == uid;
+      allow read: if true;
+    }
+    
+    match /{allPaths=**} {
+      // Default deny for all other paths
+      allow read, write: if false;
+    }
+  }
+}

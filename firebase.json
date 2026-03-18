@@ -1,0 +1,91 @@
+{
+  "hosting": {
+    "public": "apps/web/out",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/student/class/:classId",
+        "destination": "/student/class/[classId].html"
+      },
+      {
+        "source": "/student/quiz/:classId",
+        "destination": "/student/quiz/[classId].html"
+      },
+      {
+        "source": "/student/submission/:jobId",
+        "destination": "/student/submission/[jobId].html"
+      },
+      {
+        "source": "/teacher/class/:classId",
+        "destination": "/teacher/class/[classId].html"
+      },
+      {
+        "source": "/teacher/class/:classId/student/:uid",
+        "destination": "/teacher/class/[classId]/student/[uid].html"
+      }
+    ]
+  },
+  "functions": [
+    {
+      "source": "functions/grading",
+      "codebase": "grading",
+      "ignore": [
+        "venv",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "cd functions/grading && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt"
+      ],
+      "runtime": "python313"
+    },
+    {
+      "source": "functions/quiz",
+      "codebase": "quiz",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "runtime": "nodejs20"
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8081
+    },
+    "hosting": {
+      "port": 5002
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "singleProjectMode": true
+  }
+}

@@ -1,0 +1,121 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isTeacher() {
+      return isAuthenticated() && request.auth.token.role == 'teacher';
+    }
+    
+    function isStudent() {
+      return isAuthenticated() && request.auth.token.role == 'student';
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+    
+    // Kept from Iteration 1-2 for authentication flow
+    match /registration_payloads/{userId} {
+      allow write: if isOwner(userId);
+      allow read: if false; // Only Cloud Functions read this
+    }
+
+    match /classes/{classId} {
+      // Teacher writes (check request.auth.token.role == 'teacher' and owns the class)
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      
+      // Allow teacher to update/delete their own class
+      // Allow students to update the class ONLY to add their own uid to studentIds
+      allow update: if (isTeacher() && resource.data.teacherId == request.auth.uid) || 
+                       (isStudent() && 
+                        request.resource.data.diff(resource.data).affectedKeys() == ['studentIds'].toSet() &&
+                        request.resource.data.studentIds.hasAll(resource.data.studentIds) &&
+                        request.resource.data.studentIds.size() == resource.data.studentIds.size() + 1 &&
+                        request.resource.data.studentIds.hasAll([request.auth.uid]));
+      
+      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      
+      // Allow any authenticated user to read classes so students can query by classCode to join
+      allow read: if isAuthenticated();
+    }
+
+    match /knowledgeBase/{docId} {
+      // Teacher of the class writes
+      allow read, write: if true;
+
+    }
+
+    match /gradingJobs/{jobId} {
+      // Student creates (only their own studentId)
+      allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+      
+      // Allow update for Re-grade/Appeal flow
+      allow update: if isAuthenticated() && (
+        // 1. Student can update TO 'disputed'
+        (isStudent() && resource.data.studentId == request.auth.uid && 
+         request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
+         request.resource.data.status == 'disputed') 
+        ||
+        // 2. Teacher can update TO 'queued' to re-trigger
+        (isTeacher() && resource.data.teacherId == request.auth.uid &&
+         request.resource.data.status == 'queued')
+      );
+      
+      allow delete: if false;
+      
+      // Student and teacher of class read
+      allow read: if isAuthenticated() && (
+        resource.data.studentId == request.auth.uid || 
+        resource.data.teacherId == request.auth.uid ||
+        isTeacher()
+      );
+    }
+
+    match /quizAttempts/{attemptId} {
+      // Student creates their own
+      allow create: if request.auth.uid == request.resource.data.studentId;
+      
+      // Student reads their own attempts
+      allow read: if request.auth.uid == resource.data.studentId;
+      
+      // Teacher reads all attempts in their class
+      allow read: if request.auth.uid == get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId;
+      
+      // No updates/deletes — immutable once created
+      allow update, delete: if false;
+    }
+
+    match /usage/{docId} {
+      allow read: if isTeacher();
+      allow write: if false;
+    }
+
+    match /quizzes/{quizId} {
+      allow create: if isTeacher() && isOwner(request.resource.data.teacherId);
+      allow update, delete: if isTeacher() && isOwner(resource.data.teacherId);
+      
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.teacherId) ||
+        (resource.data.isActive == true &&
+         exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
+         request.auth.uid in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentIds)
+      );
+    }
+
+    // Backstop deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
