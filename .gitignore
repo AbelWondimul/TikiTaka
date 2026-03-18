@@ -26,6 +26,7 @@ dist/
 build/
 bin/
 obj/
+*.tsbuildinfo
 
 # Python
 __pycache__/
