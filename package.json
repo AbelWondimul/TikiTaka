@@ -1,0 +1,9 @@
+{
+  "name": "grader-engine-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "build": "npm run build --prefix apps/web"
+  }
+}
