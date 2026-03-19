@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
@@ -23,6 +23,7 @@ import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import { getClassById } from '@/lib/classUtils';
 import { uploadWithProgress, deleteFile } from '@/lib/storageUtils';
+import { cn } from '@/lib/utils';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,12 +41,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-// Zod schema for quiz form
-const quizFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(100, 'Title must be under 100 characters'),
-  description: z.string().min(1, 'Description is required').max(500, 'Description must be under 500 characters'),
-  isActive: z.boolean().default(true),
-});
+// Quiz form schema moved inside components for dynamic validation
 
 function TeacherClassPage() {
   const router = useRouter();
@@ -89,6 +85,17 @@ function TeacherClassPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingQuiz, setIsDeletingQuiz] = useState(false);
 
+  // Quiz form schema with dynamic validation
+  const quizFormSchema = useMemo(() => z.object({
+    title: z.string().min(1, 'Title is required').max(100, 'Title must be under 100 characters'),
+    description: z.string().min(1, 'Description is required').max(500, 'Description must be under 500 characters'),
+    isActive: z.boolean().default(true),
+    excludedDocIds: z.array(z.string()).default([]),
+  }).refine((data) => data.excludedDocIds.length < kbDocs.length, {
+    message: "At least one knowledge base document must be selected.",
+    path: ["excludedDocIds"]
+  }), [kbDocs.length]);
+
   // Quiz Form
   const quizForm = useForm({
     resolver: zodResolver(quizFormSchema),
@@ -96,6 +103,7 @@ function TeacherClassPage() {
       title: '',
       description: '',
       isActive: true,
+      excludedDocIds: [],
     },
   });
 
@@ -384,7 +392,7 @@ function TeacherClassPage() {
 
   const openNewQuizDialog = () => {
     setEditingQuiz(null);
-    quizForm.reset({ title: '', description: '', isActive: true });
+    quizForm.reset({ title: '', description: '', isActive: true, excludedDocIds: [] });
     setIsQuizDialogOpen(true);
   };
 
@@ -394,6 +402,7 @@ function TeacherClassPage() {
       title: quiz.title,
       description: quiz.description,
       isActive: quiz.isActive ?? true,
+      excludedDocIds: quiz.excludedDocIds || []
     });
     setIsQuizDialogOpen(true);
   };
@@ -407,6 +416,7 @@ function TeacherClassPage() {
           title: values.title,
           description: values.description,
           isActive: values.isActive,
+          excludedDocIds: values.excludedDocIds,
         });
       } else {
         // Create new quiz
@@ -416,6 +426,7 @@ function TeacherClassPage() {
           title: values.title,
           description: values.description,
           isActive: values.isActive,
+          excludedDocIds: values.excludedDocIds,
           createdAt: serverTimestamp(),
         });
       }
@@ -623,7 +634,7 @@ function TeacherClassPage() {
           <div className="lg:col-span-2 space-y-6">
             
             {/* Knowledge Base Section */}
-            <Card>
+            <Card id="knowledge-base">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center text-lg">
                   <FileText className="w-5 h-5 mr-2 text-primary" />
@@ -781,6 +792,7 @@ function TeacherClassPage() {
                         <TableHead>Status</TableHead>
                         <TableHead>Created</TableHead>
                         <TableHead>Attempts</TableHead>
+                        <TableHead>Sources</TableHead>
                         <TableHead className="w-[140px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -805,6 +817,9 @@ function TeacherClassPage() {
                           </TableCell>
                           <TableCell className="text-sm">
                             {quizAttempts.filter(qa => qa.quizId === quiz.id).length}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {kbDocs.length - (quiz.excludedDocIds?.length || 0)} / {kbDocs.length}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -874,7 +889,7 @@ function TeacherClassPage() {
 
       {/* Quiz Create/Edit Dialog */}
       <Dialog open={isQuizDialogOpen} onOpenChange={setIsQuizDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingQuiz ? 'Edit Quiz' : 'Create New Quiz'}</DialogTitle>
             <DialogDescription>
@@ -884,57 +899,134 @@ function TeacherClassPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...quizForm}>
-            <form onSubmit={quizForm.handleSubmit(onQuizSubmit)} className="space-y-4">
-              <FormField
-                control={quizForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Midterm Practice" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={quizForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Review limits and derivatives..."
-                        className="min-h-[80px]"
-                        {...field}
+            <form onSubmit={quizForm.handleSubmit(onQuizSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Panel: Quiz Details */}
+                <div className="space-y-4">
+                  <FormField
+                    control={quizForm.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Midterm Practice" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={quizForm.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Review limits and derivatives..."
+                            className="min-h-[80px]"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={quizForm.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Active</FormLabel>
+                          <FormDescription>
+                            Make this quiz visible to students
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Right Panel: Sources */}
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Sources for this Quiz</Label>
+                  {kbDocs.length === 0 ? (
+                    <Alert variant="destructive">
+                      <AlertDescription className="text-xs">
+                        No documents uploaded — upload at least one knowledge base document before creating a quiz.
+                        <br />
+                        <a href="#knowledge-base" className="underline mt-1 inline-block" onClick={() => setIsQuizDialogOpen(false)}>
+                          Go to Knowledge Base ↑
+                        </a>
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <>
+                      <div className="border rounded-lg p-2 max-h-[240px] overflow-y-auto space-y-1">
+                        {kbDocs.map((doc) => {
+                          const isChecked = !quizForm.watch('excludedDocIds')?.includes(doc.id);
+                          const totalChecked = kbDocs.length - (quizForm.watch('excludedDocIds')?.length || 0);
+                          const isDisabled = isChecked && totalChecked === 1;
+
+                          return (
+                            <div key={doc.id} className={cn("flex items-center space-x-3 p-2 rounded-md hover:bg-muted/50 transition-colors", !isChecked && "opacity-60")}>
+                              <input 
+                                type="checkbox"
+                                id={`doc-${doc.id}`}
+                                checked={isChecked}
+                                disabled={isDisabled}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const excluded = quizForm.getValues('excludedDocIds') || [];
+                                  if (checked) {
+                                    quizForm.setValue('excludedDocIds', excluded.filter(id => id !== doc.id));
+                                  } else {
+                                    quizForm.setValue('excludedDocIds', [...excluded, doc.id]);
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-input text-primary focus:ring-ring cursor-pointer"
+                              />
+                              <label htmlFor={`doc-${doc.id}`} className="flex items-center space-x-2 cursor-pointer flex-1">
+                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                <div className="truncate">
+                                  <span className="text-sm font-medium truncate inline-block max-w-[150px]">{doc.title}</span>
+                                  <span className="text-xs text-muted-foreground block">
+                                    {doc.uploadedAt ? new Date(doc.uploadedAt.toMillis()).toLocaleDateString() : 'Just now'}
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {kbDocs.length - (quizForm.watch('excludedDocIds')?.length || 0)} of {kbDocs.length} document(s) will be used
+                      </div>
+                      {quizForm.watch('excludedDocIds')?.length === kbDocs.length && (
+                        <Alert variant="destructive" className="py-2 px-3">
+                          <AlertDescription className="text-xs">All documents are excluded. At least one document must be selected.</AlertDescription>
+                        </Alert>
+                      )}
+                      <FormField
+                        control={quizForm.control}
+                        name="excludedDocIds"
+                        render={() => (
+                          <FormMessage className="text-xs" />
+                        )}
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={quizForm.control}
-                name="isActive"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Active</FormLabel>
-                      <FormDescription>
-                        Make this quiz visible to students
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                    </>
+                  )}
+                </div>
+              </div>
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -944,9 +1036,12 @@ function TeacherClassPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isQuizSubmitting}>
+                <Button 
+                  type="submit" 
+                  disabled={isQuizSubmitting || kbDocs.length === 0 || (quizForm.watch('excludedDocIds')?.length === kbDocs.length)}
+                >
                   {isQuizSubmitting ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving</>
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {editingQuiz ? 'Saving...' : 'Creating...'}</>
                   ) : editingQuiz ? (
                     'Save Changes'
                   ) : (

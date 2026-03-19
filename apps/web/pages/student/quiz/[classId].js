@@ -95,8 +95,12 @@ function StudentQuiz() {
 
     // Generate quiz
     try {
-      const generateQuiz = httpsCallable(functions, 'generate_quiz');
-      const result = await generateQuiz({ classId, quizId });
+      const generateQuizFn = httpsCallable(functions, 'generate_quiz');
+      const result = await generateQuizFn({ 
+        classId, 
+        quizId, 
+        excludedDocIds: quiz?.excludedDocIds || [] 
+      });
       const questionData = result.data;
 
       if (!Array.isArray(questionData) || questionData.length === 0) {

@@ -389,6 +389,7 @@ def generate_quiz(req: https_fn.CallableRequest):
 
     student_id = req.auth.uid
     class_id = req.data.get("classId") if req.data else None
+    excluded_doc_ids = req.data.get("excludedDocIds", []) if req.data else []
 
     if not class_id:
         raise https_fn.HttpsError(
@@ -431,6 +432,8 @@ def generate_quiz(req: https_fn.CallableRequest):
         import fitz  # PyMuPDF — lazy import
         kb_query = _get_db().collection("knowledgeBase").where("classId", "==", class_id).stream()
         for kb_doc in kb_query:
+            if kb_doc.id in excluded_doc_ids:
+                continue
             kb_data = kb_doc.to_dict()
             kb_path = kb_data.get("storageUrl")
             kb_blob = _get_bucket().blob(kb_path)
