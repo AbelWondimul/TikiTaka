@@ -49,6 +49,7 @@ export default function QuizPerformancePage() {
         // 2. Fetch Attempts
         const attemptsQuery = query(
           collection(db, 'quizAttempts'),
+          where('classId', '==', classId),
           where('quizId', '==', quizId),
           orderBy('createdAt', 'desc')
         );

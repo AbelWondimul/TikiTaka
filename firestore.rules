@@ -2,16 +2,19 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
+    // ─────────────────────────────────────────
     // Helper Functions
+    // ─────────────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isTeacher() {
       return isAuthenticated() && request.auth.token.role == 'teacher';
     }
-    
+
     function isStudent() {
       return isAuthenticated() && request.auth.token.role == 'student';
     }
@@ -20,100 +23,179 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
-    }
-    
-    // Kept from Iteration 1-2 for authentication flow
-    match /registration_payloads/{userId} {
-      allow write: if isOwner(userId);
-      allow read: if false; // Only Cloud Functions read this
+    // Returns true if the calling user is enrolled in the given classId
+    function isEnrolledInClass(classId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/classes/$(classId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/classes/$(classId)).data.studentIds;
     }
 
+    // Returns true if the calling teacher owns the given classId
+    function isTeacherOfClass(classId) {
+      return isTeacher() &&
+        exists(/databases/$(database)/documents/classes/$(classId)) &&
+        request.auth.uid == get(/databases/$(database)/documents/classes/$(classId)).data.teacherId;
+    }
+
+    // ─────────────────────────────────────────
+    // Users
+    // ─────────────────────────────────────────
+
+    match /users/{userId} {
+      // Any authenticated user can read profiles (teachers look up their students)
+      allow read: if isAuthenticated();
+      // Only the user themselves can write their own profile
+      allow write: if isOwner(userId);
+    }
+
+    // ─────────────────────────────────────────
+    // Registration Payloads
+    // Kept from Iteration 1-2 for authentication flow.
+    // Only Cloud Functions read this — clients never read it.
+    // ─────────────────────────────────────────
+
+    match /registration_payloads/{userId} {
+      allow write: if isOwner(userId);
+      allow read: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Classes
+    // ─────────────────────────────────────────
+
     match /classes/{classId} {
-      // Teacher writes (check request.auth.token.role == 'teacher' and owns the class)
+      // Teacher creates their own class — teacherId must match their uid at creation
       allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
-      
-      // Allow teacher to update/delete their own class
-      // Allow students to update the class ONLY to add their own uid to studentIds
-      allow update: if (isTeacher() && resource.data.teacherId == request.auth.uid) || 
-                       (isStudent() && 
+
+      // Teacher updates/deletes their own class freely
+      // Students may ONLY append their own uid to studentIds — no other fields may change
+      allow update: if (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+                       (isStudent() &&
                         request.resource.data.diff(resource.data).affectedKeys() == ['studentIds'].toSet() &&
                         request.resource.data.studentIds.hasAll(resource.data.studentIds) &&
                         request.resource.data.studentIds.size() == resource.data.studentIds.size() + 1 &&
                         request.resource.data.studentIds.hasAll([request.auth.uid]));
-      
+
       allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
-      
-      // Allow any authenticated user to read classes so students can query by classCode to join
+
+      // Any authenticated user can read classes so students can query by classCode to join
       allow read: if isAuthenticated();
     }
 
-    match /knowledgeBase/{docId} {
-      // Teacher of the class writes
-      allow read, write: if true;
+    // ─────────────────────────────────────────
+    // Knowledge Base
+    // ─────────────────────────────────────────
 
+    match /knowledgeBase/{docId} {
+      // Only teachers can write knowledge base documents
+      allow write: if isTeacher();
+
+      // Teachers can read all knowledge base docs
+      // Students can only read docs belonging to a class they are enrolled in
+      allow read: if isTeacher() ||
+                     (isStudent() && isEnrolledInClass(resource.data.classId));
     }
+
+    // ─────────────────────────────────────────
+    // Grading Jobs
+    // ─────────────────────────────────────────
 
     match /gradingJobs/{jobId} {
-      // Student creates (only their own studentId)
-      allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
-      
-      // Allow update for Re-grade/Appeal flow
+      // Student creates — client MUST write both studentId and teacherId on the document.
+      // teacherId must be a non-empty string so teacher-scoped rules function correctly.
+      allow create: if isStudent() &&
+                       request.resource.data.studentId == request.auth.uid &&
+                       request.resource.data.teacherId is string &&
+                       request.resource.data.teacherId != '';
+
+      // Re-grade / Appeal flow — tightly constrained per actor
       allow update: if isAuthenticated() && (
-        // 1. Student can update TO 'disputed'
-        (isStudent() && resource.data.studentId == request.auth.uid && 
+        // Student moves status TO 'disputed' on their own job — only status field changes
+        (isStudent() &&
+         resource.data.studentId == request.auth.uid &&
          request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
-         request.resource.data.status == 'disputed') 
+         request.resource.data.status == 'disputed')
         ||
-        // 2. Teacher can update TO 'queued' to re-trigger
-        (isTeacher() && resource.data.teacherId == request.auth.uid &&
+        // Teacher moves status TO 'queued' to re-trigger grading — only status field changes
+        (isTeacher() &&
+         resource.data.teacherId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
          request.resource.data.status == 'queued')
       );
-      
+
+      // Grading jobs are audit records — no one deletes them
       allow delete: if false;
-      
-      // Student and teacher of class read
+
+      // Student reads their own jobs; teacher reads any job belonging to their class
       allow read: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid || 
-        resource.data.teacherId == request.auth.uid ||
-        isTeacher()
+        resource.data.studentId == request.auth.uid ||
+        (isTeacher() && resource.data.teacherId == request.auth.uid)
       );
     }
 
+    // ─────────────────────────────────────────
+    // Quiz Attempts
+    // ─────────────────────────────────────────
+
     match /quizAttempts/{attemptId} {
-      // Student creates their own
-      allow create: if request.auth.uid == request.resource.data.studentId;
-      
+      // Student creates their own attempt — studentId must match their uid
+      allow create: if isStudent() && request.auth.uid == request.resource.data.studentId;
+
       // Student reads their own attempts
-      allow read: if request.auth.uid == resource.data.studentId;
-      
-      // Teacher reads all attempts in their class
-      allow read: if request.auth.uid == get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId;
-      
-      // No updates/deletes — immutable once created
+      // Teacher reads all attempts for any class they own
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.studentId
+        ||
+        isTeacherOfClass(resource.data.classId)
+      );
+
+      // Immutable once created — neither students nor teachers can alter or remove attempts
       allow update, delete: if false;
     }
 
+    // ─────────────────────────────────────────
+    // Usage
+    // ─────────────────────────────────────────
+
     match /usage/{docId} {
+      // Only teachers can view usage metrics — written exclusively by Cloud Functions
       allow read: if isTeacher();
       allow write: if false;
     }
 
+    // ─────────────────────────────────────────
+    // Quizzes
+    // ─────────────────────────────────────────
+
     match /quizzes/{quizId} {
-      allow create: if isTeacher() && isOwner(request.resource.data.teacherId);
-      allow update, delete: if isTeacher() && isOwner(resource.data.teacherId);
-      
+      // Teacher creates their own quiz — teacherId must be their uid at write time
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+
+      // Teacher updates/deletes only their own quizzes
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+
+      // Teacher reads their own quizzes via direct read or collection query.
+      // Inline field check (not isOwner) is required for collection queries to work —
+      // isOwner() passes uid as an argument which Firestore cannot resolve at query time.
+      // Students read active quizzes only if classId is valid and they are enrolled.
       allow read: if isAuthenticated() && (
-        isOwner(resource.data.teacherId) ||
-        (resource.data.isActive == true &&
-         exists(/databases/$(database)/documents/classes/$(resource.data.classId)) &&
-         request.auth.uid in get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.studentIds)
+        (isTeacher() && (
+          resource.data.teacherId == request.auth.uid ||
+          (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
+        ))
+        ||
+        (isStudent() &&
+         resource.data.isActive == true &&
+         resource.data.classId is string &&
+         resource.data.classId != '' &&
+         isEnrolledInClass(resource.data.classId))
       );
     }
 
-    // Backstop deny
+    // ─────────────────────────────────────────
+    // Backstop Deny — catches all unmatched document paths
+    // ─────────────────────────────────────────
+
     match /{document=**} {
       allow read, write: if false;
     }
