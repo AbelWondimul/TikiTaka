@@ -9,7 +9,7 @@ import Header from '@/components/layout/Header';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BookOpen, ArrowLeft } from 'lucide-react';
+import { Loader2, BookOpen, ArrowLeft, Clock } from 'lucide-react';
 
 function StudentQuizList() {
   const router = useRouter();
@@ -83,12 +83,17 @@ function StudentQuizList() {
       </Head>
       <Header />
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div>
-          <Button variant="ghost" className="mb-4 -ml-4 text-muted-foreground" onClick={() => router.push(`/student/class/${classId}`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Class
+        <div className="flex items-center justify-between">
+          <div>
+            <Button variant="ghost" className="mb-4 -ml-4 text-muted-foreground" onClick={() => router.push(`/student/class/${classId}`)}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Class
+            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Quizzes</h1>
+            <p className="text-sm text-muted-foreground">Select a quiz to start</p>
+          </div>
+          <Button variant="outline" className="gap-2" onClick={() => router.push(`/student/quizzes/${classId}/history`)}>
+            <Clock className="h-4 w-4" /> Past Attempts
           </Button>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Quizzes</h1>
-          <p className="text-sm text-muted-foreground">Select a quiz to start</p>
         </div>
 
         {quizzes.length === 0 ? (

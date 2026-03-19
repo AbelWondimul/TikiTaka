@@ -20,6 +20,7 @@ function StudentQuizReview() {
   const { user } = useAuth();
 
   const [attempt, setAttempt] = useState(null);
+  const [quizTitle, setQuizTitle] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -45,6 +46,18 @@ function StudentQuizReview() {
         }
 
         setAttempt({ id: attemptSnap.id, ...data });
+
+        // Fetch quiz title
+        if (data.quizId) {
+          try {
+            const quizDoc = await getDoc(doc(db, 'quizzes', data.quizId));
+            if (quizDoc.exists()) {
+              setQuizTitle(quizDoc.data().title);
+            }
+          } catch (err) {
+            console.error('Error fetching quiz title:', err);
+          }
+        }
       } catch (err) {
         console.error("Error loading attempt:", err);
         setErrorMessage('Failed to load quiz attempt.');
@@ -90,7 +103,7 @@ function StudentQuizReview() {
   return (
     <>
       <Head>
-        <title>Quiz Review — {attempt?.quizId ? 'Named Quiz' : 'Practice Quiz'}</title>
+        <title>{quizTitle ? `${quizTitle} Review` : 'Quiz Review'}</title>
       </Head>
       <Header />
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
@@ -98,7 +111,9 @@ function StudentQuizReview() {
           <Button variant="ghost" className="mb-4 -ml-4 text-muted-foreground" onClick={() => router.push(`/student/quizzes/${classId}/history`)}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to History
           </Button>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Quiz Review</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {quizTitle ? `${quizTitle} Review` : 'Quiz Review'}
+          </h1>
           <p className="text-sm text-muted-foreground">Detailed breakdown of your answers</p>
         </div>
 

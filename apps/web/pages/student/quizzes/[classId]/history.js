@@ -28,6 +28,7 @@ function StudentQuizHistory() {
 
   const [classData, setClassData] = useState(null);
   const [attempts, setAttempts] = useState([]);
+  const [quizTitles, setQuizTitles] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(true);
 
@@ -65,6 +66,21 @@ function StudentQuizHistory() {
         const attemptsSnap = await getDocs(q);
         const attemptList = attemptsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAttempts(attemptList);
+
+        // Fetch quiz titles
+        const quizIds = [...new Set(attemptList.map(a => a.quizId).filter(Boolean))];
+        const titleMap = {};
+        await Promise.all(quizIds.map(async (id) => {
+          try {
+            const quizDoc = await getDoc(doc(db, 'quizzes', id));
+            if (quizDoc.exists()) {
+              titleMap[id] = quizDoc.data().title;
+            }
+          } catch (err) {
+            console.error(`Error fetching quiz ${id}:`, err);
+          }
+        }));
+        setQuizTitles(titleMap);
 
       } catch (err) {
         console.error("Error loading attempts:", err);
@@ -136,7 +152,7 @@ function StudentQuizHistory() {
                   {attempts.map((attempt) => (
                     <TableRow key={attempt.id}>
                       <TableCell className="font-medium">
-                        {attempt.quizId ? 'Named Quiz' : 'Practice Quiz'}
+                        {attempt.quizId ? (quizTitles[attempt.quizId] || 'Quiz') : 'Practice Quiz'}
                       </TableCell>
                       <TableCell>
                         <Badge variant={attempt.score >= 80 ? 'default' : 'secondary'}>

@@ -292,9 +292,10 @@ function StudentDashboard() {
               ) : (
                 <div className="space-y-3">
                   {quizHistory.map((attempt) => (
-                    <div
+                    <Link
                       key={attempt.id}
-                      className="flex items-center justify-between px-4 py-3 rounded-lg border border-muted/60 bg-muted/10"
+                      href={`/student/quizzes/${attempt.classId}/${attempt.id}`}
+                      className="flex items-center justify-between px-4 py-3 rounded-lg border border-muted/60 bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer"
                     >
                       <div className="space-y-0.5">
                         <p className="text-sm font-medium text-foreground">
@@ -330,7 +331,7 @@ function StudentDashboard() {
                           {attempt.score}%
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
