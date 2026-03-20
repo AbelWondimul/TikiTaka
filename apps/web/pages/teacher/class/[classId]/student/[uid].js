@@ -160,9 +160,15 @@ function StudentPerformancePage() {
       </Head>
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div>
-          <Button variant="ghost" className="mb-4 -ml-4 text-muted-foreground" onClick={() => router.push(`/teacher/class/${classId}`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to {classData?.name || 'Class'}
-          </Button>
+          <div className="flex items-center gap-3 mb-4 -ml-4">
+            <Button variant="ghost" className="text-muted-foreground" onClick={() => router.push(`/teacher/dashboard`)}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+            </Button>
+            <span className="text-muted-foreground">|</span>
+            <Button variant="ghost" className="text-muted-foreground" onClick={() => router.push(`/teacher/class/${classId}`)}>
+              Back to {classData?.name || 'Class'}
+            </Button>
+          </div>
           
           <div className="flex items-start justify-between">
             <div>

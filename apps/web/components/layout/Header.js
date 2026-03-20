@@ -2,6 +2,7 @@ import { useAuth } from '@/lib/auth-context';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/firebase';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { User, LogOut, GraduationCap, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -22,14 +23,14 @@ export default function Header() {
   return (
     <header className="border-b bg-background/95 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Link href={role ? `/${role}/dashboard` : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           {role === 'teacher' ? (
             <GraduationCap className="h-5 w-5 text-primary" />
           ) : (
             <BookOpen className="h-5 w-5 text-primary" />
           )}
           <span className="font-semibold tracking-tight text-foreground">Grading Engine</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-3">
           <Dialog>
             <DialogTrigger asChild>

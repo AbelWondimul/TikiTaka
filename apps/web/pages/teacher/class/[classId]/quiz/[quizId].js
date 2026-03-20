@@ -159,11 +159,19 @@ export default function QuizPerformancePage() {
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <Button variant="ghost" size="sm" asChild className="pl-0 text-muted-foreground hover:bg-transparent">
-            <Link href={`/teacher/class/${classId}`} className="flex items-center gap-2">
-              <ArrowLeft className="h-4 w-4" /> Back to Class
-            </Link>
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild className="pl-0 text-muted-foreground hover:bg-transparent">
+              <Link href={`/teacher/dashboard`} className="flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+              </Link>
+            </Button>
+            <span className="text-muted-foreground">|</span>
+            <Button variant="ghost" size="sm" asChild className="pl-0 text-muted-foreground hover:bg-transparent">
+              <Link href={`/teacher/class/${classId}`} className="flex items-center gap-2">
+                Back to Class
+              </Link>
+            </Button>
+          </div>
           <h1 className="text-2xl font-semibold tracking-tight">{quiz?.title || 'Quiz Analytics'}</h1>
           <p className="text-sm text-muted-foreground">{quiz?.description}</p>
         </div>
