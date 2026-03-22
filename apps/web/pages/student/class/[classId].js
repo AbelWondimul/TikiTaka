@@ -300,6 +300,11 @@ function StudentClassDetail() {
   const renderJobStatus = () => {
     if (!activeJobId) return null;
 
+    const activeJob = submissions.find(s => s.id === activeJobId);
+    const assignmentId = activeJob?.assignmentId || selectedAssignmentId;
+    const assignment = assignments.find(a => a.id === assignmentId);
+    const totalPoints = assignment?.totalPoints || 100;
+
     if (jobStatus === 'queued' || jobStatus === 'processing') {
       return (
         <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-muted/60">
@@ -335,7 +340,7 @@ function StudentClassDetail() {
           <Alert className="bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
             <CheckCircle className="w-4 h-4 mr-2" />
             <AlertDescription className="font-medium">
-              Grading complete! Score: {jobScore}/100
+              Grading complete! Score: {jobScore}/{totalPoints}
             </AlertDescription>
           </Alert>
           
@@ -499,37 +504,42 @@ function StudentClassDetail() {
                <p className="text-xs text-muted-foreground">No submissions found for this class.</p>
             ) : (
                <div className="space-y-3">
-                  {submissions.map((sub) => (
-                      <Card key={sub.id} className="p-3 border-muted/60">
-                         <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                               <p className="text-sm font-medium truncate max-w-[150px]">
-                                  {sub.assignmentTitle || 'Assignment'}
-                               </p>
+                  {submissions.map((sub) => {
+                      const assignment = assignments.find(a => a.id === sub.assignmentId);
+                      const totalPoints = assignment?.totalPoints || 100;
+                      
+                      return (
+                        <Card key={sub.id} className="p-3 border-muted/60">
+                           <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                 <p className="text-sm font-medium truncate max-w-[150px]">
+                                    {sub.assignmentTitle || 'Assignment'}
+                                 </p>
 
-                               <p className="text-xs text-muted-foreground">
-                                  {sub.createdAt?.toDate ? sub.createdAt.toDate().toLocaleDateString() : 'N/A'}
-                               </p>
-                            </div>
-                            <div className="text-right">
-                               {sub.status === 'complete' ? (
-                                   <div className="flex flex-col items-end">
-                                      <span className="text-sm font-bold text-green-600">{sub.score}/100</span>
-                                      <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
-                                         <Link href={`/student/submission/${sub.id}`}>View</Link>
-                                      </Button>
-                                   </div>
-                               ) : sub.status === 'error' ? (
-                                   <span className="text-xs text-destructive">Failed</span>
-                               ) : (
-                                   <span className="text-xs text-primary animate-pulse flex items-center gap-1">
-                                      <Loader2 className="h-3 w-3 animate-spin" /> {sub.status}
-                                   </span>
-                               )}
-                            </div>
-                         </div>
-                      </Card>
-                  ))}
+                                 <p className="text-xs text-muted-foreground">
+                                    {sub.createdAt?.toDate ? sub.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                                 </p>
+                              </div>
+                              <div className="text-right">
+                                 {sub.status === 'complete' ? (
+                                     <div className="flex flex-col items-end">
+                                        <span className="text-sm font-bold text-green-600">{sub.score}/{totalPoints}</span>
+                                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
+                                           <Link href={`/student/submission/${sub.id}`}>View</Link>
+                                        </Button>
+                                     </div>
+                                 ) : sub.status === 'error' ? (
+                                     <span className="text-xs text-destructive">Failed</span>
+                                 ) : (
+                                     <span className="text-xs text-primary animate-pulse flex items-center gap-1">
+                                        <Loader2 className="h-3 w-3 animate-spin" /> {sub.status}
+                                     </span>
+                                 )}
+                              </div>
+                           </div>
+                        </Card>
+                     );
+                  })}
                </div>
             )}
           </div>

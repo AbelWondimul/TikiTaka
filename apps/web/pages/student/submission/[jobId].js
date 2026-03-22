@@ -17,6 +17,7 @@ function SubmissionDetail() {
   const { user } = useAuth();
   
   const [job, setJob] = useState(null);
+  const [assignment, setAssignment] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -58,6 +59,23 @@ function SubmissionDetail() {
 
     return () => unsubscribe();
   }, [jobId, user]);
+
+  useEffect(() => {
+    if (!job?.assignmentId) return;
+
+    const fetchAssignment = async () => {
+      try {
+        const assignmentSnap = await getDoc(doc(db, 'assignments', job.assignmentId));
+        if (assignmentSnap.exists()) {
+          setAssignment({ id: assignmentSnap.id, ...assignmentSnap.data() });
+        }
+      } catch (err) {
+        console.error("Failed to fetch assignment details:", err);
+      }
+    };
+
+    fetchAssignment();
+  }, [job?.assignmentId]);
 
   const handleRequestRegrade = async () => {
     if (!job) return;
@@ -150,7 +168,7 @@ function SubmissionDetail() {
              <Alert className="bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
                <CheckCircle className="w-4 h-4 mr-2" />
                <AlertDescription className="font-medium">
-                 Grading complete! Final Score: {job.score}
+                 Grading complete! Final Score: {job.score}{assignment ? ` / ${assignment.totalPoints}` : ''}
                </AlertDescription>
              </Alert>
 
