@@ -21,8 +21,13 @@ function SubmissionDetail() {
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Interactive UI State
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(true);
 
   useEffect(() => {
+
     if (!jobId || !user) return;
 
     const jobRef = doc(db, 'gradingJobs', jobId);
@@ -131,13 +136,53 @@ function SubmissionDetail() {
             </p>
         </div>
 
-        {job.status === 'complete' && (
-           <Alert className="bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
-             <CheckCircle className="w-4 h-4 mr-2" />
+        {job.hasEdgeCases && (
+           <Alert className="bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400">
+             <AlertTriangle className="w-4 h-4 mr-2" />
              <AlertDescription className="font-medium">
-               Grading complete! Final Score: {job.score}/100
+               Some answers were difficult to read. Your teacher may adjust your grade.
              </AlertDescription>
            </Alert>
+        )}
+
+        {job.status === 'complete' && (
+           <div className="space-y-4">
+             <Alert className="bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
+               <CheckCircle className="w-4 h-4 mr-2" />
+               <AlertDescription className="font-medium">
+                 Grading complete! Final Score: {job.score}
+               </AlertDescription>
+             </Alert>
+
+              {job.gradedQuestions && job.gradedQuestions.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-foreground">Question Breakdown</h3>
+                    <Button variant="outline" size="sm" onClick={() => setShowFeedback(!showFeedback)} className="text-xs transition-colors duration-150">
+                      {showFeedback ? "Hide Details" : "Expand to read feedback"}
+                    </Button>
+                  </div>
+                  
+                  {showFeedback && (
+                    <div className="grid gap-3 md:grid-cols-2 mt-2 transition-all duration-200 ease-in-out">
+                      {job.gradedQuestions.map((q) => {
+                        const statusText = String(q.status || '').charAt(0).toUpperCase() + String(q.status || '').slice(1);
+                        return (
+                          <Card key={q.questionNumber || Math.random()} className="p-4 space-y-2 border-muted/60 shadow-none">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{q.questionNumber}</span>
+                              <span className="text-xs text-muted-foreground">{statusText} ({q.pointsEarned}/{q.pointsPossible} pts)</span>
+                            </div>
+                            <p className="text-sm text-foreground">{q.feedback}</p>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
         )}
 
         {job.status === 'disputed' && (
@@ -149,11 +194,26 @@ function SubmissionDetail() {
            </Alert>
         )}
 
+
         {downloadUrl && (
-          <div className="border rounded-xl overflow-hidden h-[650px] w-full mt-4 bg-muted/20 shadow-sm">
-             <iframe src={`${downloadUrl}#toolbar=0`} width="100%" height="100%" className="border-0" title="Graded PDF" />
+          <div className="relative border rounded-xl overflow-hidden h-[650px] w-full mt-4 bg-muted/20 shadow-sm">
+             {iframeLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/30 backdrop-blur-sm z-10 space-y-3">
+                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                   <p className="text-sm font-medium text-foreground">Loading graded PDF annotations...</p>
+                </div>
+             )}
+             <iframe 
+                src={`${downloadUrl}#toolbar=0`} 
+                width="100%" 
+                height="100%" 
+                className="border-0" 
+                title="Graded PDF" 
+                onLoad={() => setIframeLoading(false)}
+             />
           </div>
         )}
+
       </div>
     </>
   );

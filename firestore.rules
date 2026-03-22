@@ -12,11 +12,19 @@ service cloud.firestore {
     }
 
     function isTeacher() {
-      return isAuthenticated() && request.auth.token.role == 'teacher';
+      return isAuthenticated() && (
+        request.auth.token.role == 'teacher' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
+      );
     }
 
     function isStudent() {
-      return isAuthenticated() && request.auth.token.role == 'student';
+      return isAuthenticated() && (
+        request.auth.token.role == 'student' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student')
+      );
     }
 
     function isOwner(uid) {
@@ -116,20 +124,25 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
          request.resource.data.status == 'disputed')
         ||
-        // Teacher moves status TO 'queued' to re-trigger grading — only status field changes
+        // Teacher overrides grade details (gradedQuestions, score) or triggers re-grade (status)
         (isTeacher() &&
          resource.data.teacherId == request.auth.uid &&
-         request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
-         request.resource.data.status == 'queued')
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'gradedQuestions', 'score', 'status']))
       );
 
       // Grading jobs are audit records — no one deletes them
       allow delete: if false;
 
       // Student reads their own jobs; teacher reads any job belonging to their class
+      // To support client-side onSnapshot listeners set right before document creation commits in the backend,
+      // allow read if the space is empty (resource == null) safely.
       allow read: if isAuthenticated() && (
+        resource == null ||
         resource.data.studentId == request.auth.uid ||
-        (isTeacher() && resource.data.teacherId == request.auth.uid)
+        (isTeacher() && (
+          resource.data.teacherId == request.auth.uid ||
+          (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
+        ))
       );
     }
 
@@ -161,6 +174,32 @@ service cloud.firestore {
       // Only teachers can view usage metrics — written exclusively by Cloud Functions
       allow read: if isTeacher();
       allow write: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Assignments (Homeworks)
+    // ─────────────────────────────────────────
+
+    match /assignments/{assignmentId} {
+      // Teacher creates their own assignment
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+
+      // Teacher updates/deletes only their own assignments
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+
+      // Teacher reads their own assignments.
+      // Students read assignments if they are enrolled in the class.
+      allow read: if isAuthenticated() && (
+        (isTeacher() && (
+          resource.data.teacherId == request.auth.uid ||
+          (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
+        ))
+        ||
+        (isStudent() &&
+         resource.data.classId is string &&
+         resource.data.classId != '' &&
+         isEnrolledInClass(resource.data.classId))
+      );
     }
 
     // ─────────────────────────────────────────

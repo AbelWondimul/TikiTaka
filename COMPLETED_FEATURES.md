@@ -36,6 +36,7 @@ This document outlines the features and components that are currently implemente
 ## ⚙️ 4. AI & Backend Architecture (Firebase Functions)
 - **📚 Python AI Grading API** (`functions/grading/`):
   - Standard endpoint configuration mapping Gemini AI prompting and `PyMuPDF` algorithms tailored for assessing assignment submissions against rubrics.
+  - **Refined Grading Logic (Iterations 3-5)**: Implemented strict structured JSON response layout including structured feedback, partial credit weighing rules, standardized red-ink comment style restrictions (Max 15 words with symbols ✓/✗/◯/±), and **Spatial Location Estimates** (`pageEstimatePercent`, `pageNumber`) for automated visual annotation anchoring.
 - **📋 Node.js Quiz Generation Pipeline** (`functions/quiz/`):
   - Cloud function scaffolding yielding quiz assets bound strictly to indexed class scopes.
 

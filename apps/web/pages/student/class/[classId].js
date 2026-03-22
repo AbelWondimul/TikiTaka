@@ -15,7 +15,9 @@ import {
   orderBy
 } from 'firebase/firestore';
 
-import { db } from '@/firebase';
+import { db, storage } from '@/firebase';
+import { ref, getDownloadURL } from 'firebase/storage';
+
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import { getClassById } from '@/lib/classUtils';
@@ -58,6 +60,13 @@ function StudentClassDetail() {
   const [jobScore, setJobScore] = useState(null);
   const [jobProgress, setJobProgress] = useState(0);
   const [jobProgressText, setJobProgressText] = useState('');
+
+  // Assignments State
+  const [assignments, setAssignments] = useState([]);
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(null);
+  const [assignmentPdfUrls, setAssignmentPdfUrls] = useState({});
+
 
   // Past Submissions State
   const [submissions, setSubmissions] = useState([]);
@@ -118,8 +127,29 @@ function StudentClassDetail() {
       }
     };
 
+    const fetchAssignments = async () => {
+      try {
+        setIsAssignmentsLoading(true);
+        const q = query(
+          collection(db, 'assignments'),
+          where('classId', '==', classId)
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedAssignments = [];
+        querySnapshot.forEach((doc) => {
+          fetchedAssignments.push({ id: doc.id, ...doc.data() });
+        });
+        setAssignments(fetchedAssignments);
+      } catch (error) {
+        console.error("Error fetching assignments:", error);
+      } finally {
+        setIsAssignmentsLoading(false);
+      }
+    };
+
     fetchClassDetails();
     fetchSubmissions();
+    fetchAssignments();
   }, [classId, user, router]);
 
   // Listen to active job status
@@ -131,8 +161,15 @@ function StudentClassDetail() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setJobStatus(data.status);
-        if (data.status === 'complete') {
-          setJobResultUrl(data.resultPdfUrl);
+        if (data.status === 'complete' && data.resultPdfUrl) {
+          getDownloadURL(ref(storage, data.resultPdfUrl))
+            .then((url) => {
+              setJobResultUrl(url);
+            })
+            .catch((err) => {
+              console.error("Failed to get result PDF url:", err);
+            });
+
           setJobScore(data.score);
           // Refresh submissions list when complete
           if (submissions.some(s => s.id === activeJobId)) {
@@ -150,6 +187,23 @@ function StudentClassDetail() {
 
     return () => unsubscribe();
   }, [activeJobId, submissions]);
+
+  // Fetch assignment PDF URL when selected
+  useEffect(() => {
+    if (!selectedAssignmentId) return;
+    
+    const assignment = assignments.find(a => a.id === selectedAssignmentId);
+    if (assignment && assignment.pdfUrl && !assignmentPdfUrls[selectedAssignmentId]) {
+      getDownloadURL(ref(storage, assignment.pdfUrl))
+        .then((url) => {
+          setAssignmentPdfUrls(prev => ({ ...prev, [selectedAssignmentId]: url }));
+        })
+        .catch((err) => {
+          console.error("Failed to get assignment PDF URL:", err);
+        });
+    }
+  }, [selectedAssignmentId, assignments, assignmentPdfUrls]);
+
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -170,19 +224,19 @@ function StudentClassDetail() {
   const handleJobSubmit = async () => {
     if (!currentClass) return;
     
-    const finalRubric = rubricType === 'structured' 
-      ? JSON.stringify(rubricItems.filter(item => item.criteria.trim() !== '')) 
-      : rubricText.trim();
+    const selectedAssignment = assignments.find(a => a.id === selectedAssignmentId);
+    if (!selectedAssignment) {
+      setSubmitError("Please select an assignment to submit.");
+      return;
+    }
 
+    const finalRubric = selectedAssignment.rubric;
     if (!finalRubric) {
-      setSubmitError("Please provide a grading rubric.");
+      setSubmitError("This assignment does not have a rubric set by the teacher.");
       return;
     }
     
-    if (rubricType === 'structured' && rubricItems.some(item => item.criteria.trim() && !item.maxPoints)) {
-       setSubmitError("Please provide max points for all criteria.");
-       return;
-    }
+    const derivedRubricType = selectedAssignment.rubricType || 'text';
 
     if (!uploadFile) {
       setSubmitError("Please select a PDF file to submit.");
@@ -204,30 +258,35 @@ function StudentClassDetail() {
       const jobRef = doc(collection(db, 'gradingJobs'));
       const jobId = jobRef.id;
 
-      await setDoc(jobRef, {
-        status: 'queued',
-        studentId: user.uid,
-        classId: classId,
-        teacherId: currentClass.teacherId,
-        rubric: finalRubric,
-        rubricType: rubricType, // Save type for UI rendering later if needed
-        rawPdfUrl: `raw/${jobId}.pdf`,
-        resultPdfUrl: null,
-        score: null,
-        createdAt: serverTimestamp()
-      });
-
       setActiveJobId(jobId);
-      setJobStatus('queued');
+      setJobStatus('uploading');
 
       const storagePath = `raw/${jobId}.pdf`;
       await uploadWithProgress(storagePath, uploadFile, (progress) => {
         setUploadProgress(progress);
       });
 
-      setRubricText('');
+      await setDoc(jobRef, {
+        status: 'queued',
+        studentId: user.uid,
+        classId: classId,
+        assignmentId: selectedAssignmentId,
+        assignmentTitle: selectedAssignment.title,
+        teacherId: currentClass.teacherId,
+        rubric: finalRubric,
+        rubricType: derivedRubricType,
+        rawPdfUrl: storagePath,
+        resultPdfUrl: null,
+        score: null,
+        createdAt: serverTimestamp()
+      });
+
+      setJobStatus('queued');
+
+
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setSelectedAssignmentId(null); // Clear selection on success
 
     } catch (err) {
       console.error("Job submission failed:", err);
@@ -334,126 +393,92 @@ function StudentClassDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Submit Form */}
           <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center text-lg">
-                  <Upload className="w-5 h-5 mr-2 text-primary" />
-                  Submit Assignment
-                </CardTitle>
-                <CardDescription>
-                  Upload your PDF submission and provide a grading rubric.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Grading Rubric</Label>
-                    <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-lg">
-                      <Button 
-                        variant={rubricType === 'text' ? 'secondary' : 'ghost'} 
-                        size="sm" 
-                        onClick={() => setRubricType('text')}
-                        className="text-xs h-7 px-2 py-0 shadow-none border-none"
-                      >
-                        Plain Text
-                      </Button>
-                      <Button 
-                        variant={rubricType === 'structured' ? 'secondary' : 'ghost'} 
-                        size="sm" 
-                        onClick={() => setRubricType('structured')}
-                        className="text-xs h-7 px-2 py-0 shadow-none border-none"
-                      >
-                        Structured (V2)
-                      </Button>
-                    </div>
-                  </div>
+            <div className="space-y-4">
+              <h2 className="text-lg font-medium text-foreground">Assignments</h2>
+              
+              {isAssignmentsLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map((i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}
+                </div>
+              ) : assignments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 bg-muted/20 rounded-xl border border-dashed text-center">
+                  <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="text-sm font-medium">No assignments yet</p>
+                  <p className="text-sm text-muted-foreground">Your teacher hasn't posted any assignments for this class.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {assignments.map((assignment) => {
+                    const hasSubmitted = submissions.some(s => s.assignmentId === assignment.id);
+                    const isSelected = selectedAssignmentId === assignment.id;
+                    
+                    return (
+                      <Card key={assignment.id} className={cn("transition-all cursor-pointer", isSelected && "border-primary shadow-sm")}>
+                        <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0" onClick={() => setSelectedAssignmentId(isSelected ? null : assignment.id)}>
+                          <div className="space-y-1">
+                            <CardTitle className="text-base font-medium flex items-center">
+                              {assignment.title}
+                              {hasSubmitted && <CheckCircle className="w-4 h-4 ml-2 text-green-500" />}
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                              Due: {assignment.dueDate || 'No due date'}
+                            </CardDescription>
+                          </div>
+                          <Button variant={isSelected ? "secondary" : "outline"} size="sm">
+                            {isSelected ? 'Cancel' : hasSubmitted ? 'Resubmit' : 'Submit'}
+                          </Button>
+                        </CardHeader>
+                        
+                        {isSelected && (
+                          <CardContent className="p-4 pt-0 border-t space-y-4 mt-2">
+                            {assignment.pdfUrl && (
+                              <div className="pt-3 border-b pb-3">
+                                <Label className="text-xs mb-1.5 block">Assignment Reference</Label>
+                                {assignmentPdfUrls[assignment.id] ? (
+                                  <Button variant="outline" size="sm" asChild className="w-full justify-start border-dashed hover:border-solid">
+                                    <a href={assignmentPdfUrls[assignment.id]} target="_blank" rel="noopener noreferrer">
+                                      <FileText className="mr-2 h-4 w-4 text-primary" /> 
+                                      <span className="truncate">View Teacher's PDF</span>
+                                    </a>
+                                  </Button>
+                                ) : (
+                                  <Button variant="outline" size="sm" className="w-full justify-start border-dashed" disabled>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading PDF Reference...
+                                  </Button>
+                                )}
+                              </div>
+                            )}
 
-                  {rubricType === 'text' ? (
-                    <Textarea 
-                      id="rubric"
-                      placeholder="Explain exactly how this assignment should be graded. Be specific about points, penalties, and what to look for."
-                      className="min-h-[100px] resize-y"
-                      value={rubricText}
-                      onChange={(e) => setRubricText(e.target.value)}
-                      disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      {rubricItems.map((item, index) => (
-                        <div key={index} className="flex gap-2 items-center">
-                          <Input 
-                            placeholder="Criteria (e.g., Code Cleanness)" 
-                            value={item.criteria}
-                            onChange={(e) => {
-                              const newItems = [...rubricItems];
-                              newItems[index].criteria = e.target.value;
-                              setRubricItems(newItems);
-                            }}
-                            className="flex-1"
-                            disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                          />
-                          <Input 
-                            type="number" 
-                            placeholder="Max Pts" 
-                            value={item.maxPoints}
-                            onChange={(e) => {
-                              const newItems = [...rubricItems];
-                              newItems[index].maxPoints = e.target.value;
-                              setRubricItems(newItems);
-                            }}
-                            className="w-20"
-                            disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                          />
-                          {rubricItems.length > 1 && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => setRubricItems(rubricItems.filter((_, i) => i !== index))}
-                              className="text-destructive h-9 w-9 p-0"
-                              disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                            >
-                              &times;
+                            <div className="space-y-2">
+
+                              <Label htmlFor="pdfFile" className="text-xs">Upload Submission PDF (Max 20MB)</Label>
+                              <Input 
+                                id="pdfFile" type="file" accept=".pdf" ref={fileInputRef} onChange={handleFileChange}
+                                disabled={isSubmittingJob}
+                                className="cursor-pointer file:cursor-pointer text-xs"
+                              />
+                            </div>
+
+                            {submitError && <Alert variant="destructive" className="py-2 px-3"><AlertDescription className="text-xs">{submitError}</AlertDescription></Alert>}
+
+                            {isSubmittingJob && (
+                              <div className="space-y-2 pt-2">
+                                <div className="flex justify-between text-xs text-muted-foreground"><span>Uploading File...</span><span>{Math.round(uploadProgress)}%</span></div>
+                                <Progress value={uploadProgress} className="h-1" />
+                              </div>
+                            )}
+
+                            <Button onClick={handleJobSubmit} disabled={isSubmittingJob} size="sm" className="w-full mt-2">
+                               {isSubmittingJob ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Submitting</> : "Submit Assignment"}
                             </Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => setRubricItems([...rubricItems, { criteria: '', maxPoints: '' }])}
-                        className="text-xs mt-1"
-                        disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                      >
-                        + Add Criteria
-                      </Button>
-                    </div>
-                  )}
+                          </CardContent>
+                        )}
+                      </Card>
+                    );
+                  })}
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pdfFile">Submission PDF (Max 20MB)</Label>
-                  <Input 
-                    id="pdfFile" type="file" accept=".pdf" ref={fileInputRef} onChange={handleFileChange}
-                    disabled={activeJobId && jobStatus !== 'complete' && jobStatus !== 'error'}
-                    className="cursor-pointer file:cursor-pointer"
-                  />
-                </div>
-
-                {submitError && <Alert variant="destructive" className="py-2 px-3"><AlertDescription className="text-xs">{submitError}</AlertDescription></Alert>}
-
-                {isSubmittingJob && (
-                  <div className="space-y-2 pt-2">
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>Uploading File...</span><span>{Math.round(uploadProgress)}%</span></div>
-                    <Progress value={uploadProgress} className="h-2" />
-                  </div>
-                )}
-
-                <Button onClick={handleJobSubmit} disabled={isSubmittingJob || (activeJobId && jobStatus !== 'complete' && jobStatus !== 'error')} className="w-full sm:w-auto mt-2">
-                   {isSubmittingJob ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting</> : "Submit for Grading"}
-                </Button>
-              </CardContent>
-            </Card>
+              )}
+            </div>
 
             {activeJobId && (
               <div className="pt-2">
@@ -479,8 +504,9 @@ function StudentClassDetail() {
                          <div className="flex items-center justify-between">
                             <div className="space-y-1">
                                <p className="text-sm font-medium truncate max-w-[150px]">
-                                  {sub.rubric.slice(0, 30)}...
+                                  {sub.assignmentTitle || 'Assignment'}
                                </p>
+
                                <p className="text-xs text-muted-foreground">
                                   {sub.createdAt?.toDate ? sub.createdAt.toDate().toLocaleDateString() : 'N/A'}
                                </p>

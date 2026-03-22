@@ -206,8 +206,8 @@ function StudentDashboard() {
                         </Link>
                       </Button>
                       <Button asChild className="flex-1">
-                        <Link href={`/student/submission/${c.id}`}>
-                          Submit Assignment
+                        <Link href={`/student/class/${c.id}`}>
+                          View Assignments
                         </Link>
                       </Button>
                     </div>

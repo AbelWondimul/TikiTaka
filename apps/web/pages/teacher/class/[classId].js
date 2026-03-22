@@ -18,7 +18,8 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
-import { db } from '@/firebase';
+import { db, functions } from '@/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import { getClassById } from '@/lib/classUtils';
@@ -85,6 +86,16 @@ function TeacherClassPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingQuiz, setIsDeletingQuiz] = useState(false);
 
+  // Assignment State
+  const [assignments, setAssignments] = useState([]);
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
+  const [isAssignmentUploading, setIsAssignmentUploading] = useState(false);
+  const [uploadAssignmentTitle, setUploadAssignmentTitle] = useState('');
+  const [uploadAssignmentFile, setUploadAssignmentFile] = useState(null);
+  const [uploadAssignmentError, setUploadAssignmentError] = useState(null);
+  const [uploadAssignmentProgress, setUploadAssignmentProgress] = useState(0);
+  const assignmentFileInputRef = useRef(null);
+
   // Quiz form schema with dynamic validation
   const quizFormSchema = useMemo(() => z.object({
     title: z.string().min(1, 'Title is required').max(100, 'Title must be under 100 characters'),
@@ -150,6 +161,28 @@ function TeacherClassPage() {
       console.error("Error fetching quizzes:", err);
     } finally {
       setIsQuizzesLoading(false);
+    }
+  };
+
+  const fetchAssignments = async () => {
+    if (!classId) return;
+    try {
+      setIsAssignmentsLoading(true);
+      const q = query(
+        collection(db, 'assignments'),
+        where('classId', '==', classId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const list = [];
+      querySnapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setAssignments(list);
+    } catch (err) {
+      console.error("Error fetching assignments:", err);
+    } finally {
+      setIsAssignmentsLoading(false);
     }
   };
 
@@ -287,6 +320,9 @@ function TeacherClassPage() {
         // 6. Fetch Quizzes
         fetchQuizzes();
 
+        // 7. Fetch Assignments
+        fetchAssignments();
+
       } catch (err) {
         console.error("Error fetching class details:", err);
         setError("Failed to load class data.");
@@ -385,6 +421,82 @@ function TeacherClassPage() {
     } catch (err) {
       console.error("Delete failed:", err);
       alert("Failed to delete document.");
+    }
+  };
+
+  const handleAssignmentFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setUploadAssignmentFile(file);
+      setUploadAssignmentError(null);
+    } else if (file) {
+      setUploadAssignmentFile(null);
+      setUploadAssignmentError("Only PDF files are supported.");
+    }
+  };
+
+  const handleAssignmentUpload = async () => {
+    if (!uploadAssignmentFile) {
+      setUploadAssignmentError("Please select a PDF file first.");
+      return;
+    }
+    if (!uploadAssignmentTitle.trim()) {
+      setUploadAssignmentError("Please provide a title.");
+      return;
+    }
+
+    setIsAssignmentUploading(true);
+    setUploadAssignmentError(null);
+    setUploadAssignmentProgress(0);
+
+    try {
+      // 1. Upload file to Storage
+      const docId = doc(collection(db, 'assignments')).id;
+      const storagePath = `assignments/${classId}/${docId}.pdf`;
+
+      const downloadURL = await uploadWithProgress(storagePath, uploadAssignmentFile, (progress) => {
+        setUploadAssignmentProgress(progress * 0.8); // 80% weight to upload
+      });
+
+      // 2. Call generate_rubric
+      setUploadAssignmentProgress(85);
+      const generateRubricFn = httpsCallable(functions, 'generate_rubric');
+      const result = await generateRubricFn({
+        classId: classId,
+        rawPdfPath: storagePath
+      });
+
+      const rubricData = result.data;
+
+      setUploadAssignmentProgress(95);
+
+      // 3. Save Assignment doc
+      await addDoc(collection(db, 'assignments'), {
+        classId: classId,
+        teacherId: user.uid,
+        title: uploadAssignmentTitle.trim(),
+        pdfUrl: storagePath,
+        rubric: rubricData,
+        totalPoints: rubricData.totalPoints || 0,
+        topic: rubricData.topic || '',
+        createdAt: serverTimestamp()
+      });
+
+      // Reset form
+      setUploadAssignmentTitle('');
+      setUploadAssignmentFile(null);
+      setUploadAssignmentProgress(0);
+      if (assignmentFileInputRef.current) {
+        assignmentFileInputRef.current.value = "";
+      }
+
+      // Refresh list
+      fetchAssignments();
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setUploadAssignmentError("Upload failed. AI might have failed to read the PDF or rate limit was hit.");
+    } finally {
+      setIsAssignmentUploading(false);
     }
   };
 
@@ -862,24 +974,122 @@ function TeacherClassPage() {
               </CardContent>
             </Card>
 
-            {/* Grading Jobs Placeholder */}
+            {/* Assignments Section */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center text-lg">
-                  <CheckCircle className="w-5 h-5 mr-2 text-primary" />
-                  PDF Grading Jobs
-                </CardTitle>
-                <CardDescription>
-                  Review student submissions and AI grading feedback (Coming in Iteration 6).
-                </CardDescription>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center text-lg">
+                      <FileText className="w-5 h-5 mr-2 text-primary" />
+                      Assignments
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Upload reading assignments or homework sheets for AI assisted grading.
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent>
-                 <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg bg-muted/30">
-                  <p className="text-sm font-medium text-foreground">Feature coming soon</p>
-                  <Button variant="outline" className="mt-4" disabled>
-                    View Grading Jobs
+              <CardContent className="space-y-6">
+                
+                {/* Upload Form */}
+                <div className="bg-muted/30 border rounded-xl p-4 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="asTitle">Assignment Title</Label>
+                      <Input 
+                        id="asTitle" 
+                        placeholder="Homework 1: Newton's Laws" 
+                        value={uploadAssignmentTitle}
+                        onChange={(e) => setUploadAssignmentTitle(e.target.value)}
+                        disabled={isAssignmentUploading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="asFile">Homework PDF</Label>
+                      <Input 
+                        id="asFile" 
+                        type="file" 
+                        accept=".pdf" 
+                        ref={assignmentFileInputRef}
+                        onChange={handleAssignmentFileChange}
+                        disabled={isAssignmentUploading}
+                        className="cursor-pointer file:cursor-pointer file:text-foreground file:font-medium file:border-0 file:bg-transparent file:mr-4"
+                      />
+                    </div>
+                  </div>
+                  
+                  {uploadAssignmentError && (
+                    <Alert variant="destructive" className="py-2 px-3">
+                      <AlertDescription className="text-xs">{uploadAssignmentError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {isAssignmentUploading && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{uploadAssignmentProgress < 85 ? 'Uploading...' : 'Analyzing with AI...'}</span>
+                        <span>{Math.round(uploadAssignmentProgress)}%</span>
+                      </div>
+                      <Progress value={uploadAssignmentProgress} className="h-2" />
+                    </div>
+                  )}
+
+                  <Button 
+                    onClick={handleAssignmentUpload} 
+                    disabled={isAssignmentUploading || !uploadAssignmentFile || !uploadAssignmentTitle.trim()} 
+                    className="w-full sm:w-auto mt-2"
+                  >
+                    {isAssignmentUploading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Rubric</>
+                    ) : (
+                      <><Upload className="w-4 h-4 mr-2" /> Create Assignment</>
+                    )}
                   </Button>
                 </div>
+
+                {/* Assignment List */}
+                <div className="pt-2">
+                  <h4 className="text-sm font-medium mb-3">Active Assignments</h4>
+                  {isAssignmentsLoading ? (
+                    <div className="space-y-3">
+                      <div className="h-12 bg-muted/50 rounded-lg animate-pulse"></div>
+                    </div>
+                  ) : assignments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg bg-muted/20">
+                      <FileIcon className="h-8 w-8 text-muted-foreground mb-3 opacity-50" />
+                      <p className="text-sm font-medium">No assignments created</p>
+                      <p className="text-xs text-muted-foreground max-w-[250px] mt-1">
+                        Create an assignment to verify rubric generation templates.
+                      </p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Topic</TableHead>
+                          <TableHead>Points</TableHead>
+                          <TableHead>Questions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {assignments.map((assignment) => (
+                          <TableRow 
+                            key={assignment.id} 
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => router.push(`/teacher/homework/${assignment.id}`)}
+                          >
+                            <TableCell className="font-medium">{assignment.title}</TableCell>
+                            <TableCell className="text-xs">{assignment.topic || 'N/A'}</TableCell>
+                            <TableCell>{assignment.totalPoints || 0}</TableCell>
+                            <TableCell>{assignment.rubric?.questions?.length || 0}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+
               </CardContent>
             </Card>
 
