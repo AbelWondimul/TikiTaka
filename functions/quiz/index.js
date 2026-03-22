@@ -6,6 +6,32 @@ if (!admin.apps.length) {
 }
 
 // ---------------------------------------------------------------------------
+// Rate Limiting Helper
+// ---------------------------------------------------------------------------
+const checkRateLimit = async (uid, action, limit) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const usageRef = admin.firestore().collection('users').doc(uid).collection('dailyUsage').doc(todayStr);
+  
+  const snap = await usageRef.get();
+  let currentCount = 0;
+  if (snap.exists) {
+    currentCount = snap.data()[action] || 0;
+  }
+  
+  if (currentCount >= limit) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      `Daily limit of ${limit} for ${action} exceeded.`
+    );
+  }
+  
+  await usageRef.set({
+    [action]: admin.firestore.FieldValue.increment(1)
+  }, { merge: true });
+};
+
+
+// ---------------------------------------------------------------------------
 // submitQuiz — HTTPS Callable (v1 onCall)
 // ---------------------------------------------------------------------------
 exports.submitQuiz = functions.https.onCall(async (data, context) => {
@@ -18,6 +44,7 @@ exports.submitQuiz = functions.https.onCall(async (data, context) => {
   }
 
   const studentId = context.auth.uid;
+  await checkRateLimit(studentId, 'submitQuiz', 30);
   const { questions, answers, classId, quizId } = data;
 
   // Validate input
@@ -161,6 +188,8 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
     );
   }
 
+  const uid = context.auth.uid;
+  await checkRateLimit(uid, 'getClassPerformance', 30);
   const { classId } = data;
   if (!classId || typeof classId !== "string") {
     throw new functions.https.HttpsError(

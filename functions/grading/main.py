@@ -70,6 +70,32 @@ def _increment_usage():
     except Exception as e:
         print(f"Failed to increment usage stats: {e}")
 
+def _check_and_increment_rate_limit(uid: str, action: str, limit: int, is_trigger: bool = False):
+    """Checks daily rates for users/{uid}/dailyUsage/{YYYY-MM-DD}"""
+    try:
+        from firebase_functions import https_fn
+        db = _get_db()
+        today_str = datetime.date.today().strftime('%Y-%m-%d')
+        usage_ref = db.collection('users').document(uid).collection('dailyUsage').document(today_str)
+        snap = usage_ref.get()
+        current_count = 0
+        if snap.exists:
+            current_count = snap.to_dict().get(action, 0)
+        if current_count >= limit:
+            if is_trigger:
+                return False
+            raise https_fn.HttpsError(
+                code=https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+                message=f"Daily limit of {limit} for {action} exceeded."
+            )
+        usage_ref.set({action: firestore.Increment(1)}, merge=True)
+        return True
+    except Exception as e:
+        if hasattr(https_fn, 'HttpsError') and isinstance(e, https_fn.HttpsError):
+            raise e
+        print(f"Stats Limit Error for {uid}: {e}")
+        return True # fail open
+
 # Heavy imports (fitz, PIL, genai) are done lazily inside functions
 # to avoid the 10-second deployment timeout.
 
@@ -118,6 +144,15 @@ def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Documen
     
     # Immediately update status to 'processing'
     _db = _get_db()
+    uid = job_data.get('studentId')
+    if uid and not _check_and_increment_rate_limit(uid, 'grade_pdf', 5, is_trigger=True):
+        job_ref = _db.collection('gradingJobs').document(job_id)
+        job_ref.update({
+            'status': 'error',
+            'feedback': 'Daily grading limit exceeded (Max 5). Please contact your teacher.'
+        })
+        return
+
     job_ref = _db.collection('gradingJobs').document(job_id)
     job_ref.update({
         'status': 'processing',
@@ -503,6 +538,8 @@ def generate_quiz(req: https_fn.CallableRequest):
         )
 
     student_id = req.auth.uid
+    _check_and_increment_rate_limit(student_id, 'generate_quiz', 10)
+    
     class_id = req.data.get("classId") if req.data else None
     excluded_doc_ids = req.data.get("excludedDocIds", []) if req.data else []
 
@@ -669,6 +706,9 @@ def generate_rubric(req: https_fn.CallableRequest):
             code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
             message="Authentication required."
         )
+
+    teacher_id = req.auth.uid
+    _check_and_increment_rate_limit(teacher_id, 'generate_rubric', 15)
 
     class_id = req.data.get("classId") if req.data else None
     raw_pdf_path = req.data.get("rawPdfPath") if req.data else None
