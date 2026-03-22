@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -19,6 +20,14 @@ let app, auth, db, storage, functions;
 
 if (typeof window !== "undefined" && !getApps().length && firebaseConfig.apiKey) {
   app = initializeApp(firebaseConfig);
+  
+  const siteKey = "6Lewy5MsAAAAADhQ1f0VgnE0LoYVF4N25dTJ-w5f"; // Replace with your reCAPTCHA v3 site key
+  if (siteKey && siteKey !== "YOUR_RECAPTCHA_V3_SITE_KEY") {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true
+    });
+  }
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
