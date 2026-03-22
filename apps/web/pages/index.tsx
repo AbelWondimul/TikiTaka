@@ -13,6 +13,47 @@ const LiquidMetal = dynamic(
   { ssr: false }
 );
 
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
+
+const faqData = [
+  {
+    question: "What is TikiTaka?",
+    answer: "TikiTaka is an AI-powered grading assistant that helps teachers review homework faster, give clearer feedback, and better understand student performance."
+  },
+  {
+    question: "How does TikiTaka work?",
+    answer: "Teachers upload student work and grading criteria, and TikiTaka analyzes each submission to suggest scores, feedback, and learning insights for review."
+  },
+  {
+    question: "What features does TikiTaka have?",
+    answer: "TikiTaka includes AI-powered PDF grading, inline feedback, precise scoring, homework and quiz management, student response tracking, and class analytics to help teachers save time and spot learning gaps faster."
+  },
+  {
+    question: "Does TikiTaka replace the teacher?",
+    answer: "No. TikiTaka supports the grading process, but teachers stay fully in control of final grades, comments, and decisions."
+  },
+  {
+    question: "What assignments can I grade with TikiTaka?",
+    answer: "TikiTaka works best for homework, short responses, essays, worksheets, quizzes, and other rubric-based assignments that can be reviewed digitally."
+  },
+  {
+    question: "Can I edit grades and feedback?",
+    answer: "Yes. Every suggested score and comment can be reviewed, adjusted, or overridden before anything is finalized."
+  },
+  {
+    question: "How does quiz generation work?",
+    answer: "Teachers can create quizzes for a class with a title and description, and student responses are saved so both teachers and students can review past results later."
+  },
+  {
+    question: "What do I need to upload to see how my students are doing in class?",
+    answer: "Upload assignments, quizzes, and student submissions so TikiTaka can track performance, highlight learning gaps, and show class-level insights."
+  },
+  {
+    question: "What file formats do you accept for homework and assignment submissions?",
+    answer: "TikiTaka currently works best with PDF submissions for homework and assignments."
+  }
+];
+
 const timelineData = [
   {
     id: 1,
@@ -115,6 +156,24 @@ export default function LiquidMetalHeroDemoPage() {
             <RadialOrbitalTimeline timelineData={timelineData} />
           </div>
         </ContainerScroll>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-6 py-16 border-t border-border mt-10 w-full mb-20">
+        <h2 className="text-xl font-medium tracking-tight text-center mb-10 text-foreground">
+          Frequently Asked Questions
+        </h2>
+        <Accordion type="single" collapsible className="w-full">
+          {faqData.map((item, index) => (
+            <AccordionItem value={`item-${index}`} key={index} className="border-border">
+              <AccordionTrigger className="text-left text-base font-medium hover:text-foreground transition-all">
+                {item.question}
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground text-sm leading-relaxed">
+                {item.answer}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
       </div>
     </div>
   );

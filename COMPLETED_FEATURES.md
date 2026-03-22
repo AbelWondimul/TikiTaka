@@ -7,6 +7,7 @@ This document outlines the features and components that are currently implemente
 ## 🔑 1. Authentication & Session Management
 - **User Authentication**: Backend set up for Teacher and Student Sign-In/Sign-Up via Firebase Auth and Firestore syncing.
 - **Session Navigation Menu**: Fully implemented dashboard navigation with functional **Profile** and **Logout** buttons for session management.
+- **Firebase App Check**: Integrated reCAPTCHA v3 provider initialization on the client side to protect backend services from abuse.
 
 ---
 
@@ -15,7 +16,10 @@ This document outlines the features and components that are currently implemente
   - Renders a grid/list layout viewing courses and enrollments managed by the teacher.
 - **Class Detail Hub & Knowledge Base Setup** (`apps/web/pages/teacher/class/[classId].js`):
   - **Upload Class Materials**: Interface to upload PDF reference documents mapping to class scopes for backing AI grading indexing operations.
+  - **Homework Rubric Generation**: AI-powered analysis of uploaded homework PDFs to infer answers and generate grading rubrics automatically.
   - **Quiz Management**: Integrated interface for creating, viewing, and managing quizzes (form for metadata, table for list view, actions for edit/deletion layouts).
+- **Student Performance Dashboard** (`apps/web/pages/teacher/class/[classId]/student/[uid].js`):
+  - Tracks individual student submission history, quiz attempts, and **Topic Gap Map** aggregating frequency of identified learning gaps.
 - **Quiz Analytics Dashboard** (`apps/web/pages/teacher/class/[classId]/quiz/[quizId].js`):
   - Detailed analytics tracking quiz attempts tables, overall performance distribution percentages scores thresholds reporting layouts cleanly.
 
@@ -30,15 +34,18 @@ This document outlines the features and components that are currently implemente
   - Adaptive headers loading detailed descriptions descriptions fallbacks layouts cleanly support visual overlays matching theme variables setups securely cleanly.
 - **Submissions Module Setup** (`apps/web/pages/student/submission/`):
   - Handling mechanisms displaying PDF assignments upload structures against assigned rubrics.
+  - **Graded PDF Viewer**: Renders graded submissions with inline annotations (red ink marks, explanations, and scores) anchored to specific page coordinates.
 
 ---
 
 ## ⚙️ 4. AI & Backend Architecture (Firebase Functions)
 - **📚 Python AI Grading API** (`functions/grading/`):
   - Standard endpoint configuration mapping Gemini AI prompting and `PyMuPDF` algorithms tailored for assessing assignment submissions against rubrics.
-  - **Refined Grading Logic (Iterations 3-5)**: Implemented strict structured JSON response layout including structured feedback, partial credit weighing rules, standardized red-ink comment style restrictions (Max 15 words with symbols ✓/✗/◯/±), and **Spatial Location Estimates** (`pageEstimatePercent`, `pageNumber`) for automated visual annotation anchoring.
+  - **Refined Grading Logic**: Implemented strict structured JSON response layout including structured feedback, partial credit weighing rules, standardized red-ink comment style restrictions, and **Spatial Location Estimates** for automated visual annotation anchoring.
 - **📋 Node.js Quiz Generation Pipeline** (`functions/quiz/`):
   - Cloud function scaffolding yielding quiz assets bound strictly to indexed class scopes.
+- **🛡️ Rate Limiting**:
+  - Implemented rate limiting triggers (`_check_and_increment_rate_limit`) on Python Cloud Functions to prevent abuse (e.g., daily limits on `grade_pdf`, `generate_quiz`, `generate_rubric`).
 
 ---
 
