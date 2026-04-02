@@ -15,27 +15,28 @@ service firebase.storage {
     }
 
 
-    match /raw/{allPaths=**} {
-      // Authenticated users may write (max 20MB)
-      allow write: if isAuthenticated() && request.resource.size < 20 * 1024 * 1024;
-      // Allow read to support getDownloadURL inside client-side upload helpers
-      allow read: if isAuthenticated();
+    match /raw/{uid}/{jobId} {
+      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 20 * 1024 * 1024;
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
-
-
-    
-    match /results/{jobIdWithExt} {
+    match /results/{uid}/{jobId} {
       allow write: if false; 
-      // Simplified to allow read for all authenticated users to bypass runtime lookup edge-cases
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
 
-
+    // Legacy fallback for documents uploaded before namespacing
+    match /raw/{jobId} {
+      allow write: if false; 
+      allow read: if isAuthenticated();
+    }
+    match /results/{jobId} {
+      allow write: if false; 
+      allow read: if isAuthenticated();
+    }
     
     match /knowledgeBase/{classId}/{docId} {
-      // Teacher of class writes; Cloud Functions read
-      // We query firestore to confirm the teacher owns the given classId
-      allow read, write: if true;
+      allow read: if isAuthenticated();
+      allow write: if isTeacher();
     }
     
     match /assignments/{classId}/{fileId} {

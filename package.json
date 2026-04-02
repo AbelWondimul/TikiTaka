@@ -2,6 +2,10 @@
   "name": "grader-engine-monorepo",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "functions/quiz"
+  ],
   "scripts": {
     "dev": "npm run dev --prefix apps/web",
     "build": "npm run build --prefix apps/web"

@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/firebase';
+import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +24,17 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 function StudentPerformancePage() {
   const router = useRouter();
   const { classId, uid } = router.query;
-  
+  const { user } = useAuth();
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [studentData, setStudentData] = useState(null);
   const [classData, setClassData] = useState(null);
   const [gradingJobs, setGradingJobs] = useState([]);
@@ -52,10 +63,11 @@ function StudentPerformancePage() {
 
   useEffect(() => {
     async function loadData() {
-      if (!classId || !uid) return;
+      if (!classId || !uid || !user) return;
 
       try {
         setIsLoading(true);
+        setError(null);
         
         // 1. Fetch Student & Class
         const [studentSnap, classSnap] = await Promise.all([
@@ -65,6 +77,7 @@ function StudentPerformancePage() {
 
         if (!studentSnap.exists()) {
           setError("Student not found.");
+          setIsLoading(false);
           return;
         }
         setStudentData(studentSnap.data());
@@ -77,12 +90,15 @@ function StudentPerformancePage() {
         const jobsQuery = query(
           collection(db, 'gradingJobs'),
           where('classId', '==', classId),
-          where('studentId', '==', uid)
+          where('studentId', '==', uid),
+          where('teacherId', '==', user.uid)
         );
         const quizQuery = query(
           collection(db, 'quizAttempts'),
           where('classId', '==', classId),
           where('studentId', '==', uid)
+          // teacherId filter omitted — old attempts may not have this field;
+          // access is enforced by security rules via isTeacherOfClass
         );
 
         const [jobsSnap, quizSnap] = await Promise.all([
@@ -125,7 +141,7 @@ function StudentPerformancePage() {
     }
 
     loadData();
-  }, [classId, uid]);
+  }, [classId, uid, user]);
 
   if (isLoading) {
     return (

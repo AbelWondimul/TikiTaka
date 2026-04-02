@@ -32,6 +32,15 @@ function StudentQuiz() {
   const { classId, quizId } = router.query;
   const { user } = useAuth();
 
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   // Class info
   const [className, setClassName] = useState('');
   const [quiz, setQuiz] = useState(null);

@@ -32,25 +32,10 @@ def _get_db():
         _db = firestore.client()
     return _db
 
-_lifecycle_set = False
-
 def _get_bucket():
-    global _bucket, _lifecycle_set
+    global _bucket
     if _bucket is None:
         _bucket = storage.bucket()
-        if not _lifecycle_set:
-            try:
-                _bucket.lifecycle_rules = [
-                    {
-                        "action": {"type": "Delete"},
-                        "condition": {"age": 90, "matchesPrefix": ["results/"]}
-                    }
-                ]
-                _bucket.patch()
-                _lifecycle_set = True
-                print("Applied Storage Lifecycle Rule for results/")
-            except Exception as e:
-                print(f"Failed to set lifecycle: {e}")
     return _bucket
 
 
@@ -70,39 +55,14 @@ def _increment_usage():
     except Exception as e:
         print(f"Failed to increment usage stats: {e}")
 
-def _check_and_increment_rate_limit(uid: str, action: str, limit: int, is_trigger: bool = False):
-    """Checks daily rates for users/{uid}/dailyUsage/{YYYY-MM-DD}"""
-    try:
-        from firebase_functions import https_fn
-        db = _get_db()
-        today_str = datetime.date.today().strftime('%Y-%m-%d')
-        usage_ref = db.collection('users').document(uid).collection('dailyUsage').document(today_str)
-        snap = usage_ref.get()
-        current_count = 0
-        if snap.exists:
-            current_count = snap.to_dict().get(action, 0)
-        if current_count >= limit:
-            if is_trigger:
-                return False
-            raise https_fn.HttpsError(
-                code=https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
-                message=f"Daily limit of {limit} for {action} exceeded."
-            )
-        usage_ref.set({action: firestore.Increment(1)}, merge=True)
-        return True
-    except Exception as e:
-        if hasattr(https_fn, 'HttpsError') and isinstance(e, https_fn.HttpsError):
-            raise e
-        print(f"Stats Limit Error for {uid}: {e}")
-        return True # fail open
-
 # Heavy imports (fitz, PIL, genai) are done lazily inside functions
 # to avoid the 10-second deployment timeout.
 
 def _init_genai():
     """Lazy-init Gemini. Called inside handler functions only."""
     import google.generativeai as genai
-    api_key = os.environ.get('GOOGLEAI_KEY')
+    # Check both common names for the API key
+    api_key = os.environ.get('GOOGLEAI_KEY') or os.environ.get('GEMINI_API_KEY')
     if api_key:
         genai.configure(api_key=api_key)
     return genai
@@ -113,7 +73,8 @@ def _init_genai():
 @firestore_fn.on_document_written(
     document="gradingJobs/{jobId}",
     timeout_sec=540,
-    memory=options.MemoryOption.GB_2
+    memory=options.MemoryOption.GB_2,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot | None]]) -> None:
     """Triggered when a grading job is created or updated."""
@@ -144,15 +105,6 @@ def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Documen
     
     # Immediately update status to 'processing'
     _db = _get_db()
-    uid = job_data.get('studentId')
-    if uid and not _check_and_increment_rate_limit(uid, 'grade_pdf', 5, is_trigger=True):
-        job_ref = _db.collection('gradingJobs').document(job_id)
-        job_ref.update({
-            'status': 'error',
-            'feedback': 'Daily grading limit exceeded (Max 5). Please contact your teacher.'
-        })
-        return
-
     job_ref = _db.collection('gradingJobs').document(job_id)
     job_ref.update({
         'status': 'processing',
@@ -477,7 +429,8 @@ Example structure (NO other text/markdown outside this array):
         
         job_ref.update({'progress': 90, 'progress_text': 'Recompiled annotated PDF.'})
         # 8. Upload Result and Update Job
-        result_path = f"results/{job_id}.pdf"
+        student_id = job_data.get('studentId', 'unknown')
+        result_path = f"results/{student_id}/{job_id}.pdf"
         res_blob = _get_bucket().blob(result_path)
         res_blob.upload_from_string(out_bytes, content_type="application/pdf")
         
@@ -523,6 +476,7 @@ from firebase_functions import https_fn
 @https_fn.on_call(
     timeout_sec=300,
     memory=options.MemoryOption.GB_1,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def generate_quiz(req: https_fn.CallableRequest):
     """
@@ -538,8 +492,6 @@ def generate_quiz(req: https_fn.CallableRequest):
         )
 
     student_id = req.auth.uid
-    _check_and_increment_rate_limit(student_id, 'generate_quiz', 10)
-    
     class_id = req.data.get("classId") if req.data else None
     excluded_doc_ids = req.data.get("excludedDocIds", []) if req.data else []
 
@@ -610,10 +562,10 @@ def generate_quiz(req: https_fn.CallableRequest):
     # ------------------------------------------------------------------
     # 3. Call Gemini to generate 10 MCQ questions
     # ------------------------------------------------------------------
-    if not os.environ.get('GOOGLEAI_KEY'):
+    if not (os.environ.get('GOOGLEAI_KEY') or os.environ.get('GEMINI_API_KEY')):
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
-            message="AI service is not configured."
+            message="AI service is not configured. Set GOOGLEAI_KEY in Firebase Function secrets."
         )
 
     genai = _init_genai()
@@ -694,6 +646,7 @@ Return ONLY a valid JSON array (no markdown). Each item must have:
 @https_fn.on_call(
     timeout_sec=300,
     memory=options.MemoryOption.GB_2,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def generate_rubric(req: https_fn.CallableRequest):
     """
@@ -706,9 +659,6 @@ def generate_rubric(req: https_fn.CallableRequest):
             code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
             message="Authentication required."
         )
-
-    teacher_id = req.auth.uid
-    _check_and_increment_rate_limit(teacher_id, 'generate_rubric', 15)
 
     class_id = req.data.get("classId") if req.data else None
     raw_pdf_path = req.data.get("rawPdfPath") if req.data else None
@@ -752,10 +702,10 @@ def generate_rubric(req: https_fn.CallableRequest):
         )
 
     # 2. Call Gemini
-    if not os.environ.get('GOOGLEAI_KEY'):
+    if not (os.environ.get('GOOGLEAI_KEY') or os.environ.get('GEMINI_API_KEY')):
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INTERNAL,
-            message="AI service is not configured."
+            message="AI service is not configured. Set GOOGLEAI_KEY in Firebase Function secrets."
         )
 
     genai = _init_genai()

@@ -18,7 +18,16 @@ function TeacherSubmissionReview() {
   const router = useRouter();
   const { homeworkId, submissionId } = router.query;
   const { user } = useAuth();
-  
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [submission, setSubmission] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadUrl, setDownloadUrl] = useState(null);
@@ -124,7 +133,7 @@ function TeacherSubmissionReview() {
           <Card>
             <CardHeader><CardTitle className="text-lg">Grading Breakdown</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm font-medium">Final Score: {submission.score}/10</p>
+              <p className="text-sm font-medium">Final Score: {submission.score} pts</p>
               <p className="text-xs text-muted-foreground">Label: {performanceLabel(submission.score)}</p>
 
               {submission.gradedQuestions && submission.gradedQuestions.length > 0 && (

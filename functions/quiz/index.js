@@ -6,32 +6,6 @@ if (!admin.apps.length) {
 }
 
 // ---------------------------------------------------------------------------
-// Rate Limiting Helper
-// ---------------------------------------------------------------------------
-const checkRateLimit = async (uid, action, limit) => {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const usageRef = admin.firestore().collection('users').doc(uid).collection('dailyUsage').doc(todayStr);
-  
-  const snap = await usageRef.get();
-  let currentCount = 0;
-  if (snap.exists) {
-    currentCount = snap.data()[action] || 0;
-  }
-  
-  if (currentCount >= limit) {
-    throw new functions.https.HttpsError(
-      "resource-exhausted",
-      `Daily limit of ${limit} for ${action} exceeded.`
-    );
-  }
-  
-  await usageRef.set({
-    [action]: admin.firestore.FieldValue.increment(1)
-  }, { merge: true });
-};
-
-
-// ---------------------------------------------------------------------------
 // submitQuiz — HTTPS Callable (v1 onCall)
 // ---------------------------------------------------------------------------
 exports.submitQuiz = functions.https.onCall(async (data, context) => {
@@ -44,7 +18,6 @@ exports.submitQuiz = functions.https.onCall(async (data, context) => {
   }
 
   const studentId = context.auth.uid;
-  await checkRateLimit(studentId, 'submitQuiz', 30);
   const { questions, answers, classId, quizId } = data;
 
   // Validate input
@@ -101,11 +74,23 @@ exports.submitQuiz = functions.https.onCall(async (data, context) => {
 
   const score = (correct / 10) * 100;
 
+  // Fetch class to get teacherId
+  let teacherId = null;
+  try {
+    const classSnap = await admin.firestore().collection("classes").doc(classId).get();
+    if (classSnap.exists) {
+      teacherId = classSnap.data().teacherId;
+    }
+  } catch (err) {
+    console.error("Error fetching class for teacherId:", err);
+  }
+
   // Write to Firestore
   const attemptRef = admin.firestore().collection("quizAttempts").doc();
   await attemptRef.set({
     studentId,
     classId,
+    teacherId, // Included for easier querying by teachers
     quizId: quizId || null,
     score,
     topicGaps,
@@ -133,13 +118,19 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
     // Since a standard auth.user().onCreate trigger does not receive client-side registration payloads,
     // we read from a temporary Firestore collection `registration_payloads` that the client
     // writes to immediately before or after account creation.
-    // We add a slight delay to ensure the client has time to write the payload document.
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
+    // We use a retry loop to give the client time to write the payload document.
+    let payloadSnap = null;
     const payloadRef = admin.firestore().collection("registration_payloads").doc(uid);
-    const payloadSnap = await payloadRef.get();
 
-    if (payloadSnap.exists) {
+    for (let i = 0; i < 5; i++) {
+      payloadSnap = await payloadRef.get();
+      if (payloadSnap.exists) break;
+      
+      console.log(`Payload not found for ${uid}, attempt ${i + 1}, retrying in 2s...`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    if (payloadSnap && payloadSnap.exists) {
       const payloadData = payloadSnap.data();
       
       // Update display name if it was passed in the payload
@@ -155,6 +146,8 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
 
       // Clean up the temporary payload document
       await payloadRef.delete();
+    } else {
+      console.warn(`No registration payload found for user ${uid} after retries. Defaulting to student.`);
     }
 
     // Set custom user claims
@@ -188,8 +181,6 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const uid = context.auth.uid;
-  await checkRateLimit(uid, 'getClassPerformance', 30);
   const { classId } = data;
   if (!classId || typeof classId !== "string") {
     throw new functions.https.HttpsError(
@@ -200,6 +191,14 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
 
   try {
     const db = admin.firestore();
+
+    const classSnap = await db.collection("classes").doc(classId).get();
+    if (!classSnap.exists || classSnap.data().teacherId !== context.auth.uid) {
+      throw new functions.https.HttpsError(
+        'permission-denied', 
+        'Not authorized to view performance for this class.'
+      );
+    }
 
     const [jobsSnap, quizSnap] = await Promise.all([
       db.collection("gradingJobs").where("classId", "==", classId).get(),

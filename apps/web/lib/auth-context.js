@@ -18,30 +18,36 @@ export const AuthProvider = ({ children }) => {
           const idTokenResult = await firebaseUser.getIdTokenResult();
           let currentRole = idTokenResult.claims.role;
 
-          // Fallback: read from Firestore, with retry for new registrations
-          // The Cloud Function takes a few seconds to create the user doc
+          // Fallback: refresh token for new registrations
+          // The Cloud Function takes a moment to set the custom claim
           if (!currentRole) {
-            const docRef = doc(db, 'users', firebaseUser.uid);
-            const maxRetries = 5;
+            const maxRetries = 3;
             for (let i = 0; i < maxRetries; i++) {
-              const docSnap = await getDoc(docRef);
-              if (docSnap.exists()) {
-                currentRole = docSnap.data().role;
+              await new Promise((r) => setTimeout(r, 2000));
+              await firebaseUser.getIdToken(true); // force refresh
+              const refreshedToken = await firebaseUser.getIdTokenResult();
+              if (refreshedToken.claims.role) {
+                currentRole = refreshedToken.claims.role;
                 break;
-              }
-              // Wait 2s before retrying (Cloud Function needs time)
-              if (i < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 2000));
               }
             }
           }
 
           setUser(firebaseUser);
-          setRole(currentRole || 'student');
+          // Only set role if we actually found one, otherwise keep it null 
+          // to prevent premature redirection by components using this context
+          if (currentRole) {
+            setRole(currentRole);
+          } else {
+            // After all retries, if still no role, and it's not a new user, 
+            // we might default, but better to stay null for now or handle in UI
+            console.warn("No role found for user after retries");
+            setRole(null); 
+          }
         } catch (error) {
           console.error("Error fetching user role:", error);
           setUser(firebaseUser);
-          setRole('student');
+          setRole(null);
         }
       } else {
         setUser(null);

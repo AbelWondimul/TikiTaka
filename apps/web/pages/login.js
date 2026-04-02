@@ -55,13 +55,14 @@ export default function Login() {
           timestamp: new Date().toISOString()
         });
         
-        // Force token refresh after 4 seconds to pick up the custom claims set by the Cloud Function
+        // Force token refresh after 6 seconds to pick up the custom claims set by the Cloud Function
+        // Live environments may have slightly more latency than local emulators.
         setTimeout(() => {
           userCredential.user.getIdToken(true).then(() => {
             // Re-trigger auth context state update
             router.reload();
           });
-        }, 4000);
+        }, 6000);
       }
     } catch (err) {
       console.error(err);

@@ -48,7 +48,16 @@ function TeacherClassPage() {
   const router = useRouter();
   const { classId } = router.query;
   const { user } = useAuth();
-  
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [classData, setClassData] = useState(null);
   const [enrolledStudents, setEnrolledStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -149,6 +158,7 @@ function TeacherClassPage() {
       const q = query(
         collection(db, 'quizzes'),
         where('classId', '==', classId),
+        where('teacherId', '==', user.uid),
         orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
@@ -171,6 +181,7 @@ function TeacherClassPage() {
       const q = query(
         collection(db, 'assignments'),
         where('classId', '==', classId),
+        where('teacherId', '==', user.uid),
         orderBy('createdAt', 'desc')
       );
       const querySnapshot = await getDocs(q);
@@ -230,7 +241,11 @@ function TeacherClassPage() {
               where('classId', '==', classId),
               where('teacherId', '==', user.uid)
             );
-            const quizQuery = query(collection(db, 'quizAttempts'), where('classId', '==', classId));
+            const quizQuery = query(
+              collection(db, 'quizAttempts'), 
+              where('classId', '==', classId),
+              where('teacherId', '==', user.uid)
+            );
             
             const [jobsSnapshot, quizSnapshot] = await Promise.all([
               getDocs(gradingJobsQuery),

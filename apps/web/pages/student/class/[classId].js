@@ -37,7 +37,16 @@ function StudentClassDetail() {
   const router = useRouter();
   const { classId } = router.query;
   const { user } = useAuth();
-  
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [currentClass, setCurrentClass] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null); // Added for debugging fallback
@@ -261,7 +270,7 @@ function StudentClassDetail() {
       setActiveJobId(jobId);
       setJobStatus('uploading');
 
-      const storagePath = `raw/${jobId}.pdf`;
+      const storagePath = `raw/${user.uid}/${jobId}.pdf`;
       await uploadWithProgress(storagePath, uploadFile, (progress) => {
         setUploadProgress(progress);
       });

@@ -156,10 +156,17 @@ service cloud.firestore {
 
       // Student reads their own attempts
       // Teacher reads all attempts for any class they own
+      // Falls back to class ownership for documents that pre-date the teacherId field
       allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.studentId
-        ||
-        isTeacherOfClass(resource.data.classId)
+        resource != null && (
+          request.auth.uid == resource.data.studentId
+          ||
+          (isTeacher() && (
+            request.auth.uid == resource.data.teacherId
+            ||
+            (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
+          ))
+        )
       );
 
       // Immutable once created — neither students nor teachers can alter or remove attempts

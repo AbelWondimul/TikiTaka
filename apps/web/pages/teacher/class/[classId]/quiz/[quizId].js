@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { db } from '@/firebase';
 import { doc, getDoc, getDocs, query, collection, where, orderBy } from 'firebase/firestore';
 import { 
-  ArrowLeft, Award, CheckCircle, Clock, FileText, AlertCircle 
+  ArrowLeft, Award, CheckCircle, Clock, FileText, AlertCircle, Loader2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,15 @@ export default function QuizPerformancePage() {
   const router = useRouter();
   const { classId, quizId } = router.query;
   const { user } = useAuth();
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   const [quiz, setQuiz] = useState(null);
   const [attempts, setAttempts] = useState([]);
@@ -51,6 +60,8 @@ export default function QuizPerformancePage() {
           collection(db, 'quizAttempts'),
           where('classId', '==', classId),
           where('quizId', '==', quizId),
+          // teacherId filter omitted — old attempts may not have this field;
+          // access is enforced by security rules via isTeacherOfClass
           orderBy('createdAt', 'desc')
         );
         const attemptsSnap = await getDocs(attemptsQuery);
@@ -353,7 +364,7 @@ export default function QuizPerformancePage() {
                   <Card key={index} className="p-4">
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">{index + 1}. {q.text}</p>
+                        <p className="text-sm font-medium">{index + 1}. {q.question || q.text}</p>
                         <Badge variant={q.correct ? "default" : "destructive"}>
                           {q.correct ? 'Correct' : 'Incorrect'}
                         </Badge>
@@ -370,12 +381,25 @@ export default function QuizPerformancePage() {
 
                           return (
                             <div key={optIdx} className="flex items-center gap-2">
-                              <Badge variant={variant} className="w-full text-left justify-start">
+                              <Badge variant={variant} className="w-full h-auto py-2 whitespace-normal text-left justify-start leading-tight">
                                 {option}
                               </Badge>
                             </div>
                           );
                         })}
+                      </div>
+
+                      <div className="mt-4 flex flex-col gap-1.5 p-3 bg-muted/20 rounded-md border border-muted/50">
+                        <div className="text-sm">
+                          <span className="font-semibold text-muted-foreground pr-1">Student selected:</span>
+                          <span className="font-medium">{q.studentAnswer || "No answer provided"}</span>
+                        </div>
+                        {!q.correct && (
+                          <div className="text-sm">
+                            <span className="font-semibold text-muted-foreground pr-1">Correct answer:</span>
+                            <span className="font-medium text-green-600 dark:text-green-500">{q.answer}</span>
+                          </div>
+                        )}
                       </div>
 
                       {q.explanation && (

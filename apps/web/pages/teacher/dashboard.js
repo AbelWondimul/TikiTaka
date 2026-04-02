@@ -3,7 +3,7 @@ import Head from 'next/head';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -28,6 +28,7 @@ function TeacherDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newlyCreatedClassCode, setNewlyCreatedClassCode] = useState(null);
+  const [usageStats, setUsageStats] = useState(null);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -56,6 +57,18 @@ function TeacherDashboard() {
 
   useEffect(() => {
     fetchClasses();
+    
+    async function fetchUsage() {
+      try {
+        const snap = await getDoc(doc(db, 'usage', 'stats'));
+        if (snap.exists()) {
+          setUsageStats(snap.data());
+        }
+      } catch (error) {
+        console.error("Error fetching usage stats:", error);
+      }
+    }
+    fetchUsage();
   }, [user]);
 
   async function onSubmit(values) {
@@ -87,7 +100,28 @@ function TeacherDashboard() {
       </Head>
       <Header />
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-
+        {usageStats && (
+          <Card className="bg-muted/20 border-muted/60">
+            <CardHeader className="py-4">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                AI API usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2 flex gap-8">
+               <div>
+                  <p className="text-2xl font-bold tracking-tight text-foreground">{usageStats.totalCalls || 0}</p>
+                  <p className="text-xs text-muted-foreground">Total API Actions</p>
+               </div>
+               <div>
+                  <p className="text-2xl font-bold tracking-tight text-foreground">
+                    {usageStats.dailyStats ? (usageStats.dailyStats[new Date().toISOString().split('T')[0]] || 0) : 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Today's Actions</p>
+               </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">

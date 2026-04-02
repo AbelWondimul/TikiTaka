@@ -15,7 +15,16 @@ function SubmissionDetail() {
   const router = useRouter();
   const { jobId } = router.query;
   const { user } = useAuth();
-  
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [job, setJob] = useState(null);
   const [assignment, setAssignment] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

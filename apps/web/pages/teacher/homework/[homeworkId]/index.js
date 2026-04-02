@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/firebase';
+import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +24,17 @@ import { Loader2, ArrowLeft, FileText, CheckCircle, HelpCircle } from 'lucide-re
 function AssignmentSubmissionsPage() {
   const router = useRouter();
   const { homeworkId } = router.query;
-  
+  const { user } = useAuth();
+
+  // Don't render until router params are available (required for static export)
+  if (!router.isReady) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const [assignment, setAssignment] = useState(null);
   const [classData, setClassData] = useState(null);
   const [students, setStudents] = useState([]);
@@ -33,7 +44,7 @@ function AssignmentSubmissionsPage() {
 
   useEffect(() => {
     async function loadData() {
-      if (!homeworkId) return;
+      if (!homeworkId || !user) return;
 
       try {
         setIsLoading(true);
@@ -80,7 +91,8 @@ function AssignmentSubmissionsPage() {
         const jobsQuery = query(
           collection(db, 'gradingJobs'),
           where('assignmentId', '==', homeworkId),
-          where('classId', '==', classId)
+          where('classId', '==', classId),
+          where('teacherId', '==', user.uid)
         );
         const jobsSnap = await getDocs(jobsQuery);
         const jobsList = jobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -95,7 +107,7 @@ function AssignmentSubmissionsPage() {
     }
 
     loadData();
-  }, [homeworkId]);
+  }, [homeworkId, user]);
 
   if (isLoading) {
     return (
@@ -198,7 +210,7 @@ function AssignmentSubmissionsPage() {
                       <TableRow key={student.uid} className={cn(hasSubmitted && "cursor-pointer hover:bg-muted/50 transition-colors")} onClick={() => {
                         if (hasSubmitted) {
                            // Route to teacher review view
-                           router.push(`/teacher/homework/${homeworkId}/submissions/${submission.id}`);
+                           router.push(`/teacher/homework/${assignment.id}/submissions/${submission.id}`);
                         }
                       }}>
                         <TableCell className="font-medium">
@@ -221,7 +233,7 @@ function AssignmentSubmissionsPage() {
                           {hasSubmitted && (
                             <Button variant="ghost" size="sm" onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/teacher/homework/${homeworkId}/submissions/${submission.id}`);
+                              router.push(`/teacher/homework/${assignment.id}/submissions/${submission.id}`);
                             }}>
                               View Details
                             </Button>

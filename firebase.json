@@ -27,6 +27,18 @@
       {
         "source": "/teacher/class/:classId/student/:uid",
         "destination": "/teacher/class/[classId]/student/[uid].html"
+      },
+      {
+        "source": "/teacher/class/:classId/quiz/:quizId",
+        "destination": "/teacher/class/[classId]/quiz/[quizId].html"
+      },
+      {
+        "source": "/teacher/homework/:homeworkId",
+        "destination": "/teacher/homework/[homeworkId].html"
+      },
+      {
+        "source": "/teacher/homework/:homeworkId/submissions/:submissionId",
+        "destination": "/teacher/homework/[homeworkId]/submissions/[submissionId].html"
       }
     ]
   },
@@ -42,9 +54,9 @@
         "*.local"
       ],
       "predeploy": [
-        "cd functions/grading && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt"
+        "cd functions/grading && python -m venv venv && python -c \"import subprocess,sys,os; pip=os.path.join('venv','Scripts','pip') if os.name=='nt' else os.path.join('venv','bin','pip'); subprocess.check_call([pip,'install','-r','requirements.txt'])\""
       ],
-      "runtime": "python313"
+      "runtime": "python311"
     },
     {
       "source": "functions/quiz",

@@ -17,6 +17,7 @@ Thumbs.db
 # Environments
 .env
 .env.local
+.env.local.example
 .env.development.local
 .env.test.local
 .env.production.local
@@ -39,5 +40,4 @@ venv/
 .venv/
 pip-log.txt
 pip-delete-this-directory.txt
-# Security
-SECURITY_VULNERABILITIES.md
+    
