@@ -100,10 +100,16 @@ function TeacherClassPage() {
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
   const [isAssignmentUploading, setIsAssignmentUploading] = useState(false);
   const [uploadAssignmentTitle, setUploadAssignmentTitle] = useState('');
+  const [uploadAssignmentDueDate, setUploadAssignmentDueDate] = useState('');
   const [uploadAssignmentFile, setUploadAssignmentFile] = useState(null);
   const [uploadAssignmentError, setUploadAssignmentError] = useState(null);
   const [uploadAssignmentProgress, setUploadAssignmentProgress] = useState(0);
   const assignmentFileInputRef = useRef(null);
+
+  // Edit Assignment State
+  const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
+  const [isAssignmentSubmitting, setIsAssignmentSubmitting] = useState(false);
 
   // Quiz form schema with dynamic validation
   const quizFormSchema = useMemo(() => z.object({
@@ -125,6 +131,16 @@ function TeacherClassPage() {
       isActive: true,
       excludedDocIds: [],
     },
+  });
+
+  const assignmentFormSchema = z.object({
+    title: z.string().min(1, 'Title is required').max(100, 'Title must be under 100 characters'),
+    dueDate: z.string().optional()
+  });
+
+  const assignmentForm = useForm({
+    resolver: zodResolver(assignmentFormSchema),
+    defaultValues: { title: '', dueDate: '' }
   });
 
   const fetchKnowledgeBase = async () => {
@@ -494,11 +510,13 @@ function TeacherClassPage() {
         rubric: rubricData,
         totalPoints: rubricData.totalPoints || 0,
         topic: rubricData.topic || '',
+        dueDate: uploadAssignmentDueDate ? new Date(uploadAssignmentDueDate) : null,
         createdAt: serverTimestamp()
       });
 
       // Reset form
       setUploadAssignmentTitle('');
+      setUploadAssignmentDueDate('');
       setUploadAssignmentFile(null);
       setUploadAssignmentProgress(0);
       if (assignmentFileInputRef.current) {
@@ -512,6 +530,49 @@ function TeacherClassPage() {
       setUploadAssignmentError("Upload failed. AI might have failed to read the PDF or rate limit was hit.");
     } finally {
       setIsAssignmentUploading(false);
+    }
+  };
+
+  const openEditAssignmentDialog = (e, asgn) => {
+    e.stopPropagation();
+    setEditingAssignment(asgn);
+    let dateStr = '';
+    if (asgn.dueDate) {
+      const d = asgn.dueDate?.toDate ? asgn.dueDate.toDate() : new Date(asgn.dueDate);
+      // Format as YYYY-MM-DD
+      const offset = d.getTimezoneOffset();
+      const localDate = new Date(d.getTime() - (offset*60*1000));
+      dateStr = localDate.toISOString().split('T')[0];
+    }
+    assignmentForm.reset({
+      title: asgn.title,
+      dueDate: dateStr
+    });
+    setIsAssignmentDialogOpen(true);
+  };
+
+  const onAssignmentSubmit = async (values) => {
+    setIsAssignmentSubmitting(true);
+    try {
+      let dd = null;
+      if (values.dueDate) {
+        // Assume dueDate input correctly returns YYYY-MM-DD string, create proper date object
+        const parts = values.dueDate.split('-');
+        dd = new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      
+      await updateDoc(doc(db, 'assignments', editingAssignment.id), {
+        title: values.title,
+        dueDate: dd
+      });
+
+      setIsAssignmentDialogOpen(false);
+      assignmentForm.reset();
+      fetchAssignments();
+    } catch (err) {
+      console.error("Assignment save failed:", err);
+    } finally {
+      setIsAssignmentSubmitting(false);
     }
   };
 
@@ -1020,17 +1081,28 @@ function TeacherClassPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="asFile">Homework PDF</Label>
-                      <Input 
-                        id="asFile" 
-                        type="file" 
-                        accept=".pdf" 
-                        ref={assignmentFileInputRef}
-                        onChange={handleAssignmentFileChange}
+                      <Label htmlFor="asDueDate">Due Date <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                      <Input
+                        id="asDueDate"
+                        type="date"
+                        value={uploadAssignmentDueDate}
+                        onChange={(e) => setUploadAssignmentDueDate(e.target.value)}
                         disabled={isAssignmentUploading}
-                        className="cursor-pointer file:cursor-pointer file:text-foreground file:font-medium file:border-0 file:bg-transparent file:mr-4"
+                        min={new Date().toISOString().split('T')[0]}
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="asFile">Homework PDF</Label>
+                    <Input 
+                      id="asFile" 
+                      type="file" 
+                      accept=".pdf" 
+                      ref={assignmentFileInputRef}
+                      onChange={handleAssignmentFileChange}
+                      disabled={isAssignmentUploading}
+                      className="cursor-pointer file:cursor-pointer file:text-foreground file:font-medium file:border-0 file:bg-transparent file:mr-4"
+                    />
                   </div>
                   
                   {uploadAssignmentError && (
@@ -1085,6 +1157,8 @@ function TeacherClassPage() {
                           <TableHead>Topic</TableHead>
                           <TableHead>Points</TableHead>
                           <TableHead>Questions</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="w-[80px]">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1098,6 +1172,33 @@ function TeacherClassPage() {
                             <TableCell className="text-xs">{assignment.topic || 'N/A'}</TableCell>
                             <TableCell>{assignment.totalPoints || 0}</TableCell>
                             <TableCell>{assignment.rubric?.questions?.length || 0}</TableCell>
+                             <TableCell>
+                               {assignment.dueDate ? (() => {
+                                 const d = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : new Date(assignment.dueDate);
+                                 const diffDays = Math.ceil((d - new Date()) / (1000 * 60 * 60 * 24));
+                                 return (
+                                   <Badge variant={diffDays <= 2 ? 'destructive' : 'secondary'} className="text-xs font-medium">
+                                     {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                   </Badge>
+                                 );
+                               })() : <span className="text-muted-foreground text-xs">—</span>}
+                             </TableCell>
+                             <TableCell onClick={(e) => e.stopPropagation()}>
+                               <DropdownMenu>
+                                 <DropdownMenuTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-8 w-8">
+                                     <MoreHorizontal className="h-4 w-4" />
+                                     <span className="sr-only">Actions</span>
+                                   </Button>
+                                 </DropdownMenuTrigger>
+                                 <DropdownMenuContent align="end">
+                                   <DropdownMenuItem onClick={(e) => openEditAssignmentDialog(e, assignment)}>
+                                     <Pencil className="mr-2 h-4 w-4" />
+                                     Edit Config
+                                   </DropdownMenuItem>
+                                 </DropdownMenuContent>
+                               </DropdownMenu>
+                             </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1308,6 +1409,74 @@ function TeacherClassPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Assignment Edit Dialog */}
+      <Dialog open={isAssignmentDialogOpen} onOpenChange={setIsAssignmentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Assignment</DialogTitle>
+            <DialogDescription>
+              Update the assignment details below. Note: Rubric cannot be edited once generated.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...assignmentForm}>
+            <form onSubmit={assignmentForm.handleSubmit(onAssignmentSubmit)} className="space-y-6">
+              <div className="space-y-4">
+                <FormField
+                  control={assignmentForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Homework 1: Newton's Laws" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignmentForm.control}
+                  name="dueDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Due Date <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAssignmentDialogOpen(false)}
+                  disabled={isAssignmentSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={isAssignmentSubmitting}
+                >
+                  {isAssignmentSubmitting ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </>

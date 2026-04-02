@@ -20,6 +20,7 @@ import { ref, getDownloadURL } from 'firebase/storage';
 
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
+import Header from '@/components/layout/Header';
 import { getClassById } from '@/lib/classUtils';
 import { uploadWithProgress } from '@/lib/storageUtils';
 
@@ -30,8 +31,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Clock, BookOpen } from 'lucide-react';
 
 function StudentClassDetail() {
   const router = useRouter();
@@ -389,101 +391,186 @@ function StudentClassDetail() {
   return (
     <>
       <Head>
-        <title>{currentClass.name} - Class Details</title>
+        <title>{currentClass.name} - TikiTaka</title>
       </Head>
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div>
-          <Button variant="ghost" className="pl-0 mb-4 text-muted-foreground hover:bg-transparent" onClick={() => router.push('/student/dashboard')}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+      <Header />
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8 min-h-screen">
+        <header className="space-y-4">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="-ml-2 text-muted-foreground hover:bg-transparent hover:text-foreground transition-colors" 
+            onClick={() => router.push('/student/dashboard')}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Dashboard
           </Button>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {currentClass.name}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Teacher: <span className="font-medium text-foreground">{currentClass.teacherName || 'Unknown'}</span>
-          </p>
-        </div>
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                {currentClass.name}
+              </h1>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                  {currentClass.teacherName?.charAt(0) || 'T'}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Instructor: <span className="text-foreground font-medium">{currentClass.teacherName || 'Unknown'}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Submit Form */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <div className="space-y-4">
-              <h2 className="text-lg font-medium text-foreground">Assignments</h2>
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold tracking-tight">Active Assignments</h2>
+                <Badge variant="outline" className="font-normal text-muted-foreground">
+                  {assignments.length} Total
+                </Badge>
+              </div>
               
               {isAssignmentsLoading ? (
-                <div className="space-y-3">
-                  {[1,2,3].map((i) => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}
+                <div className="space-y-4">
+                  {[1,2].map((i) => <div key={i} className="h-32 bg-muted/40 animate-pulse rounded-2xl border" />)}
                 </div>
               ) : assignments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 bg-muted/20 rounded-xl border border-dashed text-center">
-                  <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-                  <p className="text-sm font-medium">No assignments yet</p>
-                  <p className="text-sm text-muted-foreground">Your teacher hasn't posted any assignments for this class.</p>
+                <div className="flex flex-col items-center justify-center py-20 bg-muted/10 rounded-2xl border border-dashed text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted/20 flex items-center justify-center mb-4">
+                    <FileText className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-base font-medium">No assignments yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your instructor hasn't posted any assignments.
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid gap-4">
                   {assignments.map((assignment) => {
                     const hasSubmitted = submissions.some(s => s.assignmentId === assignment.id);
                     const isSelected = selectedAssignmentId === assignment.id;
                     
                     return (
-                      <Card key={assignment.id} className={cn("transition-all cursor-pointer", isSelected && "border-primary shadow-sm")}>
-                        <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0" onClick={() => setSelectedAssignmentId(isSelected ? null : assignment.id)}>
-                          <div className="space-y-1">
-                            <CardTitle className="text-base font-medium flex items-center">
+                      <Card 
+                        key={assignment.id} 
+                        className={cn(
+                          "transition-all duration-200 border-muted/60 overflow-hidden rounded-2xl group", 
+                          isSelected ? "ring-2 ring-primary border-transparent shadow-lg" : "hover:shadow-md hover:border-muted-foreground/20"
+                        )}
+                      >
+                        <CardHeader 
+                          className="p-5 flex flex-row items-center justify-between space-y-0 cursor-pointer" 
+                          onClick={() => setSelectedAssignmentId(isSelected ? null : assignment.id)}
+                        >
+                          <div className="space-y-1.5">
+                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
                               {assignment.title}
-                              {hasSubmitted && <CheckCircle className="w-4 h-4 ml-2 text-green-500" />}
+                              {hasSubmitted && (
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 border-none px-1.5 h-5">
+                                  <CheckCircle className="w-3 w-3 mr-1" /> Graded
+                                </Badge>
+                              )}
                             </CardTitle>
-                            <CardDescription className="text-xs">
-                              Due: {assignment.dueDate || 'No due date'}
-                            </CardDescription>
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                Due: {assignment.dueDate || 'No due date'}
+                              </span>
+                              <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+                              <span>{assignment.totalPoints || 100} pts</span>
+                            </div>
                           </div>
-                          <Button variant={isSelected ? "secondary" : "outline"} size="sm">
-                            {isSelected ? 'Cancel' : hasSubmitted ? 'Resubmit' : 'Submit'}
+                          <Button 
+                            variant={isSelected ? "secondary" : "outline"} 
+                            size="sm"
+                            className={cn("rounded-full px-5 transition-all", !isSelected && "group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary")}
+                          >
+                            {isSelected ? 'Cancel' : hasSubmitted ? 'Resubmit' : 'Open'}
                           </Button>
                         </CardHeader>
                         
                         {isSelected && (
-                          <CardContent className="p-4 pt-0 border-t space-y-4 mt-2">
+                          <CardContent className="p-5 pt-0 border-t bg-muted/5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
                             {assignment.pdfUrl && (
-                              <div className="pt-3 border-b pb-3">
-                                <Label className="text-xs mb-1.5 block">Assignment Reference</Label>
+                              <div className="pt-4 space-y-2">
+                                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resources</Label>
                                 {assignmentPdfUrls[assignment.id] ? (
-                                  <Button variant="outline" size="sm" asChild className="w-full justify-start border-dashed hover:border-solid">
-                                    <a href={assignmentPdfUrls[assignment.id]} target="_blank" rel="noopener noreferrer">
-                                      <FileText className="mr-2 h-4 w-4 text-primary" /> 
-                                      <span className="truncate">View Teacher's PDF</span>
-                                    </a>
-                                  </Button>
+                                  <a 
+                                    href={assignmentPdfUrls[assignment.id]} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center p-3 rounded-xl border border-muted/60 bg-background hover:bg-muted/30 transition-colors group/file"
+                                  >
+                                    <FileText className="mr-3 h-5 w-5 text-primary" /> 
+                                    <span className="text-sm font-medium flex-1 truncate">{assignment.title} - Reference.pdf</span>
+                                    <Upload className="h-4 w-4 text-muted-foreground opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                                  </a>
                                 ) : (
-                                  <Button variant="outline" size="sm" className="w-full justify-start border-dashed" disabled>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading PDF Reference...
-                                  </Button>
+                                  <div className="flex items-center p-3 rounded-xl border border-dashed bg-background/50">
+                                    <Loader2 className="mr-3 h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground italic">Loading reference...</span>
+                                  </div>
                                 )}
                               </div>
                             )}
 
-                            <div className="space-y-2">
-
-                              <Label htmlFor="pdfFile" className="text-xs">Upload Submission PDF (Max 20MB)</Label>
-                              <Input 
-                                id="pdfFile" type="file" accept=".pdf" ref={fileInputRef} onChange={handleFileChange}
-                                disabled={isSubmittingJob}
-                                className="cursor-pointer file:cursor-pointer text-xs"
-                              />
+                            <div className="space-y-3">
+                              <Label htmlFor="pdfFile" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submission</Label>
+                              <div className="relative group/upload">
+                                <Input 
+                                  id="pdfFile" 
+                                  type="file" 
+                                  accept=".pdf" 
+                                  ref={fileInputRef} 
+                                  onChange={handleFileChange}
+                                  disabled={isSubmittingJob}
+                                  className="cursor-pointer file:cursor-pointer h-24 border-dashed border-2 hover:border-primary/50 transition-colors flex items-center justify-center text-center py-8"
+                                />
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-muted-foreground group-hover/upload:text-primary transition-colors">
+                                  {!uploadFile ? (
+                                    <>
+                                      <Upload className="h-6 w-6 mb-2" />
+                                      <p className="text-xs font-medium">Click to select or drag & drop PDF</p>
+                                      <p className="text-[10px] opacity-60">Maximum size 20MB</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileText className="h-6 w-6 mb-2 text-primary" />
+                                      <p className="text-sm font-semibold text-foreground">{uploadFile.name}</p>
+                                      <p className="text-[10px] opacity-60">Ready to submit • {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
 
-                            {submitError && <Alert variant="destructive" className="py-2 px-3"><AlertDescription className="text-xs">{submitError}</AlertDescription></Alert>}
+                            {submitError && (
+                              <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 rounded-xl">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription className="text-xs">{submitError}</AlertDescription>
+                              </Alert>
+                            )}
 
                             {isSubmittingJob && (
                               <div className="space-y-2 pt-2">
-                                <div className="flex justify-between text-xs text-muted-foreground"><span>Uploading File...</span><span>{Math.round(uploadProgress)}%</span></div>
-                                <Progress value={uploadProgress} className="h-1" />
+                                <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
+                                  <span>Uploading Submission</span>
+                                  <span>{Math.round(uploadProgress)}%</span>
+                                </div>
+                                <Progress value={uploadProgress} className="h-1.5 bg-muted/50 rounded-full overflow-hidden" />
                               </div>
                             )}
 
-                            <Button onClick={handleJobSubmit} disabled={isSubmittingJob} size="sm" className="w-full mt-2">
-                               {isSubmittingJob ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Submitting</> : "Submit Assignment"}
+                            <Button 
+                              onClick={handleJobSubmit} 
+                              disabled={isSubmittingJob || !uploadFile} 
+                              className="w-full rounded-xl py-6 text-base font-semibold shadow-md active:scale-[0.98] transition-all"
+                            >
+                               {isSubmittingJob ? (
+                                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+                               ) : "Submit for Grading"}
                             </Button>
                           </CardContent>
                         )}
@@ -492,66 +579,81 @@ function StudentClassDetail() {
                   })}
                 </div>
               )}
-            </div>
+            </section>
 
             {activeJobId && (
-              <div className="pt-2">
-                <h3 className="text-sm font-medium mb-3">Active Job Status</h3>
+              <section className="space-y-4 pt-4 border-t border-muted/40 animate-in slide-in-from-bottom-4 duration-500">
+                <h3 className="text-lg font-semibold tracking-tight">Active Grading Job</h3>
                 {renderJobStatus()}
+              </section>
+            )}
+          </div>
+
+          <aside className="space-y-6">
+            <div className="p-6 rounded-3xl bg-primary/5 border border-primary/10 space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-widest text-primary/70">Class Actions</h3>
+              <div className="grid gap-2">
+                <Button variant="ghost" className="w-full justify-start rounded-xl hover:bg-primary/10 hover:text-primary transition-colors h-11" onClick={() => router.push(`/student/quizzes/${classId}`)}>
+                  <BookOpen className="mr-3 h-4 w-4" /> Class Quizzes
+                </Button>
+                <Button variant="ghost" className="w-full justify-start rounded-xl hover:bg-primary/10 hover:text-primary transition-colors h-11" onClick={() => router.push(`/student/quizzes/${classId}/history`)}>
+                  <Clock className="mr-3 h-4 w-4" /> Quiz History
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Past Submissions list */}
-          <div className="lg:col-span-1 space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Submissions History</h3>
-            {isSubmissionsLoading ? (
-               <div className="space-y-3">
-                  {[1,2,3].map((i) => <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />)}
-               </div>
-            ) : submissions.length === 0 ? (
-               <p className="text-xs text-muted-foreground">No submissions found for this class.</p>
-            ) : (
-               <div className="space-y-3">
-                  {submissions.map((sub) => {
-                      const assignment = assignments.find(a => a.id === sub.assignmentId);
-                      const totalPoints = assignment?.totalPoints || 100;
-                      
-                      return (
-                        <Card key={sub.id} className="p-3 border-muted/60">
-                           <div className="flex items-center justify-between">
-                              <div className="space-y-1">
-                                 <p className="text-sm font-medium truncate max-w-[150px]">
-                                    {sub.assignmentTitle || 'Assignment'}
-                                 </p>
-
-                                 <p className="text-xs text-muted-foreground">
-                                    {sub.createdAt?.toDate ? sub.createdAt.toDate().toLocaleDateString() : 'N/A'}
-                                 </p>
-                              </div>
-                              <div className="text-right">
-                                 {sub.status === 'complete' ? (
-                                     <div className="flex flex-col items-end">
-                                        <span className="text-sm font-bold text-green-600">{sub.score}/{totalPoints}</span>
-                                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
-                                           <Link href={`/student/submission/${sub.id}`}>View</Link>
-                                        </Button>
-                                     </div>
-                                 ) : sub.status === 'error' ? (
-                                     <span className="text-xs text-destructive">Failed</span>
-                                 ) : (
-                                     <span className="text-xs text-primary animate-pulse flex items-center gap-1">
-                                        <Loader2 className="h-3 w-3 animate-spin" /> {sub.status}
-                                     </span>
-                                 )}
-                              </div>
-                           </div>
-                        </Card>
-                     );
-                  })}
-               </div>
-            )}
-          </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="text-base font-bold text-foreground">Recent Activity</h3>
+                <Link href="/student/dashboard" className="text-xs font-medium text-primary hover:underline">View All</Link>
+              </div>
+              
+              {isSubmissionsLoading ? (
+                <div className="space-y-3">
+                   {[1,2,3].map((i) => <div key={i} className="h-20 bg-muted/20 animate-pulse rounded-2xl" />)}
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className="text-center py-10 px-6 rounded-2xl border border-dashed border-muted/60 bg-muted/5">
+                   <p className="text-sm text-muted-foreground italic">No submissions yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                   {submissions.slice(0, 5).map((sub) => {
+                       const assignment = assignments.find(a => a.id === sub.assignmentId);
+                       const totalPoints = assignment?.totalPoints || 100;
+                       
+                       return (
+                         <Card key={sub.id} className="p-4 border-muted/50 rounded-2xl hover:border-primary/30 transition-colors cursor-pointer group" onClick={() => router.push(`/student/submission/${sub.id}`)}>
+                            <div className="flex items-center justify-between gap-4">
+                               <div className="space-y-1 overflow-hidden">
+                                  <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
+                                     {sub.assignmentTitle || 'Assignment'}
+                                  </p>
+                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-tight">
+                                     {sub.createdAt?.toDate ? sub.createdAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pending'}
+                                  </p>
+                               </div>
+                               <div className="text-right shrink-0">
+                                  {sub.status === 'complete' ? (
+                                      <div className="inline-flex flex-col items-end">
+                                         <span className="text-sm font-bold text-green-600 dark:text-green-400 bg-green-500/5 px-2 py-0.5 rounded-md border border-green-500/20">{sub.score}/{totalPoints}</span>
+                                      </div>
+                                  ) : sub.status === 'error' ? (
+                                      <Badge variant="destructive" className="h-5 px-1.5 font-bold uppercase text-[9px] tracking-widest">Failed</Badge>
+                                  ) : (
+                                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-primary uppercase animate-pulse">
+                                         <Loader2 className="h-3 w-3 animate-spin" /> {sub.status}
+                                      </div>
+                                  )}
+                               </div>
+                            </div>
+                         </Card>
+                      );
+                   })}
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
     </>

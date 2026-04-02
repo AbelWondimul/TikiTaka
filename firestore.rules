@@ -239,6 +239,49 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Conversations & Messages
+    // ─────────────────────────────────────────
+
+    match /conversations/{conversationId} {
+      // Allow read if user is the student or the teacher in the conversation
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.studentId || 
+        request.auth.uid == resource.data.teacherId
+      );
+
+      // Allow create if student is enrolled in the class or teacher owns the class
+      allow create: if isAuthenticated() && (
+        (isStudent() && request.auth.uid == request.resource.data.studentId && isEnrolledInClass(request.resource.data.classId)) ||
+        (isTeacher() && request.auth.uid == request.resource.data.teacherId && isTeacherOfClass(request.resource.data.classId))
+      );
+
+      // Allow update if user is participant
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.studentId || 
+        request.auth.uid == resource.data.teacherId
+      );
+
+      match /messages/{messageId} {
+        // Read messages if parent conversation exists and user is a participant
+        allow read: if isAuthenticated() &&
+          exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+          (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.studentId == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid
+          );
+
+        // Create message if user is a participant in the conversation
+        allow create: if isAuthenticated() &&
+          request.resource.data.senderId == request.auth.uid &&
+          exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+          (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.studentId == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid
+          );
+      }
+    }
+
+    // ─────────────────────────────────────────
     // Backstop Deny — catches all unmatched document paths
     // ─────────────────────────────────────────
 

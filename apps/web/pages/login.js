@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, GraduationCap, BookOpen } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
+import Logo from '@/components/layout/Logo';
+import { cn } from '@/lib/utils';
 
 export default function Login() {
   const router = useRouter();
@@ -44,22 +41,15 @@ export default function Login() {
         // On success, useEffect redirects
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        
-        // Update auth profile
         await updateProfile(userCredential.user, { displayName: name });
-        
-        // Write registration payload with selected role
         await setDoc(doc(db, 'registration_payloads', userCredential.user.uid), {
           displayName: name,
           role: selectedRole,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString() 
         });
         
-        // Force token refresh after 6 seconds to pick up the custom claims set by the Cloud Function
-        // Live environments may have slightly more latency than local emulators.
         setTimeout(() => {
           userCredential.user.getIdToken(true).then(() => {
-            // Re-trigger auth context state update
             router.reload();
           });
         }, 6000);
@@ -82,116 +72,204 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>{isLogin ? 'Login' : 'Register'} - Automated PDF Grading Engine</title>
+        <title>{isLogin ? 'Sign In' : 'Join'} - TikiTaka AI</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+        <style>{`
+          .headline-font { font-family: 'Manrope', sans-serif; }
+          body { font-family: 'Inter', sans-serif; background-color: #f7faf9; }
+          .dark body { background-color: #0f172a; }
+        `}</style>
       </Head>
-      <div className="flex flex-col items-center justify-center min-h-screen py-16 px-4 bg-muted/40 text-center select-none">
-        <Card className="w-full max-w-sm text-left">
-          <CardHeader>
-            <CardTitle>{isLogin ? 'Welcome Back' : 'Create an Account'}</CardTitle>
-            <CardDescription>
-              {isLogin ? 'Enter your credentials to access your dashboard' : 'Sign up to access the grading engine'}
-            </CardDescription>
-          </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+      <div className="flex flex-col min-h-screen bg-[#f7faf9] dark:bg-slate-950 text-[#181c1c] dark:text-slate-100">
+        
+        {/* TopNavBar */}
+        <header className="w-full top-0 sticky z-50 bg-[#f7faf9] dark:bg-slate-900 border-b border-[#f1f4f3] dark:border-slate-800">
+          <div className="flex justify-between items-center px-6 md:px-12 py-6 max-w-[1440px] mx-auto">
+            
+            {/* The standard green/black Logo is here as requested */}
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              <Logo className="scale-110" />
+            </Link>
+
+            <nav className="hidden md:flex items-center gap-8 font-['Manrope'] tracking-tight">
+              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Product</Link>
+              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Solutions</Link>
+              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Pricing</Link>
+            </nav>
+            <div className="flex items-center gap-6 font-['Manrope'] tracking-tight">
+              <button 
+                onClick={() => setIsLogin(true)}
+                className={cn(
+                  "opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300",
+                  isLogin ? "text-[#006b5b] font-semibold dark:text-[#88f3da]" : "text-[#181c1c] dark:text-slate-400"
+                )}
+              >
+                Sign In
+              </button>
+              <button 
+                onClick={() => setIsLogin(false)}
+                className={cn(
+                  "font-semibold hover:scale-95 transition-transform duration-200",
+                  !isLogin ? "text-[#006b5b] dark:text-[#88f3da] border-b-2 border-[#006b5b] pb-0.5" : "text-[#181c1c] dark:text-slate-400 opacity-80"
+                )}
+              >
+                Sign Up
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Canvas */}
+        <main className="flex-grow flex items-center justify-center px-6 py-20">
+          <div className="w-full max-w-lg bg-[#ffffff] dark:bg-slate-900 rounded-xl shadow-[0_20px_40px_rgba(24,28,28,0.06)] dark:shadow-none dark:border dark:border-slate-800 overflow-hidden">
+            <div className="p-10 md:p-14">
               
-              {!isLogin && (
-                <>
-                  <div className="space-y-2">
-                    <Label>I am a</Label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('student')}
-                        className={cn(
-                          'flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors',
-                          selectedRole === 'student'
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border bg-background text-muted-foreground hover:border-primary/40'
-                        )}
-                      >
-                        <BookOpen className="h-6 w-6" />
-                        <span className="text-sm font-medium">Student</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('teacher')}
-                        className={cn(
-                          'flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors',
-                          selectedRole === 'teacher'
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-border bg-background text-muted-foreground hover:border-primary/40'
-                        )}
-                      >
-                        <GraduationCap className="h-6 w-6" />
-                        <span className="text-sm font-medium">Teacher</span>
-                      </button>
+              {/* Header & Toggle */}
+              <div className="text-center mb-10">
+                <h1 className="text-3xl font-extrabold headline-font text-[#003b5a] dark:text-white tracking-tight mb-4">
+                  {isLogin ? 'Welcome Back' : 'Join TikiTaka'}
+                </h1>
+                <p className="text-[#41474e] dark:text-slate-400 font-['Inter'] text-sm mb-8">
+                  {isLogin ? 'Sign in to access your dashboard.' : 'Start your journey into precision pedagogy.'}
+                </p>
+                
+                {/* Toggle Switch */}
+                <div className="inline-flex bg-[#f1f4f3] dark:bg-slate-800 p-1.5 rounded-full">
+                  <button 
+                    onClick={() => { setIsLogin(true); setError(''); }}
+                    className={cn(
+                      "px-6 py-2 text-xs font-semibold tracking-widest uppercase rounded-full transition-all duration-300",
+                      isLogin ? "bg-[#ffffff] dark:bg-slate-700 text-[#006b5b] dark:text-[#88f3da] shadow-sm" : "text-[#41474e] dark:text-slate-400 hover:text-[#003b5a]"
+                    )}
+                  >
+                    Sign In
+                  </button>
+                  <button 
+                    onClick={() => { setIsLogin(false); setError(''); }}
+                    className={cn(
+                      "px-6 py-2 text-xs font-semibold tracking-widest uppercase rounded-full transition-all duration-300",
+                      !isLogin ? "bg-[#ffffff] dark:bg-slate-700 text-[#006b5b] dark:text-[#88f3da] shadow-sm" : "text-[#41474e] dark:text-slate-400 hover:text-[#003b5a]"
+                    )}
+                  >
+                    Sign Up
+                  </button>
+                </div>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg text-xs font-medium border border-red-100 dark:border-red-900">
+                    {error}
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1" htmlFor="name">Full Name</label>
+                    <div className="relative">
+                      <input 
+                        id="name" 
+                        type="text"
+                        placeholder="Alex Rivers" 
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required={!isLogin}
+                        className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
+                      />
                     </div>
                   </div>
+                )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input 
-                      id="name" 
-                      placeholder="John Doe" 
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required={!isLogin}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1" htmlFor="email">Email Address</label>
+                  <div className="relative">
+                    <input 
+                      id="email" 
+                      type="email"
+                      placeholder="alex@tikitaka.ai" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
                     />
                   </div>
-                </>
-              )}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="m@example.com" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1" htmlFor="password">Password</label>
+                  <div className="relative">
+                    <input 
+                      id="password" 
+                      type="password"
+                      placeholder="••••••••" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
+                {!isLogin && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1">I am a</label>
+                      <select 
+                        value={selectedRole}
+                        onChange={(e) => setSelectedRole(e.target.value)}
+                        className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white transition-all duration-300 rounded-t-lg outline-none"
+                      >
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1" htmlFor="invite">Invite Token</label>
+                      <input 
+                        id="invite" 
+                        type="text"
+                        placeholder="TK-0000" 
+                        className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
 
+                <div className="pt-6">
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full flex justify-center bg-[#006b5b] dark:bg-[#88f3da] text-[#ffffff] dark:text-[#00201a] py-4 px-6 rounded-lg headline-font font-bold tracking-tight hover:brightness-110 active:scale-95 transition-all duration-200"
+                  >
+                    {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                    {isLogin ? 'Sign In' : 'Create Account'}
+                  </button>
+                </div>
 
-            </CardContent>
-            <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isLogin ? 'Sign In' : 'Register'}
-              </Button>
-              
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="w-full"
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setError('');
-                }}
-              >
-                {isLogin ? 'Need an account? Register' : 'Already have an account? Sign In'}
-              </Button>
-            </CardFooter>
-          </form>
-        </Card>
+                <p className="text-center text-[10px] text-[#72787f] dark:text-slate-500 px-4 font-['Inter'] leading-relaxed">
+                  By signing {isLogin ? 'in' : 'up'}, you agree to our Terms of Service and Privacy Policy. Data processed by TikiTaka AI.
+                </p>
+              </form>
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="w-full border-t-0 bg-[#f7faf9] dark:bg-slate-950">
+          <div className="bg-[#f1f4f3] dark:bg-slate-800 h-px w-full mb-8"></div>
+          <div className="flex flex-col items-center justify-center py-12 px-6 w-full text-center">
+            <p className="font-['Inter'] text-xs tracking-widest uppercase text-[#003b5a] dark:text-slate-400 mb-6">
+              © 2026 Tiki Taka AI. Precision in Pedagogy.
+            </p>
+            <div className="flex flex-wrap justify-center gap-8 font-['Inter'] text-xs tracking-widest uppercase">
+              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Privacy Policy</Link>
+              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Terms of Service</Link>
+              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Contact Support</Link>
+            </div>
+          </div>
+        </footer>
+
       </div>
     </>
   );

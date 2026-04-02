@@ -25,7 +25,13 @@ import {
   RotateCcw,
   BookOpen,
   PlayCircle,
+  Menu,
 } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 function StudentQuiz() {
   const router = useRouter();
@@ -451,112 +457,204 @@ function StudentQuiz() {
   // ------------------------------------------------------------------
   // Render: Quiz (active question)
   // ------------------------------------------------------------------
+  
+  // Calculate stroke dasharray/offset for circular progress
+  const r = 20;
+  const circumference = 2 * Math.PI * r;
+  const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
+
   return (
-    <>
+    <div className="font-['Inter'] text-slate-900 bg-[#F9FAFB] min-h-[max(884px,100dvh)]">
       <Head>
-        <title>
-          Quiz — Question {currentIndex + 1} of {questions.length}
-        </title>
+        <title>Quiz Interface - TikiTaka</title>
       </Head>
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            className="pl-0 text-muted-foreground hover:bg-transparent"
-            onClick={() => router.push('/student/dashboard')}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Exit Quiz
-          </Button>
-          <span className="text-sm text-muted-foreground font-medium">
-            Question {currentIndex + 1} of {questions.length}
-          </span>
+
+      {/* TopAppBar */}
+      <header className="fixed top-0 w-full z-50 bg-white/85 backdrop-blur-md shadow-sm">
+        <div className="flex items-center justify-between px-6 py-4 w-full max-w-none">
+          <div className="flex items-center gap-3">
+            <Sheet>
+              <SheetTrigger asChild>
+                <button className="text-teal-800 hover:opacity-80 transition-opacity">
+                  <Menu className="w-6 h-6" />
+                </button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[300px] p-0 border-r-0">
+                <div className="flex flex-col h-full bg-surface">
+                  <div className="px-6 py-8 border-b border-slate-100">
+                    <div className="flex items-center space-x-3 mb-6">
+                      <div className="h-10 w-10 bg-[#0f766e] rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                        T
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-teal-800 leading-none">Main Menu</h2>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">Navigation</p>
+                      </div>
+                    </div>
+                  </div>
+                  <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
+                    {[
+                      { name: 'Overview', icon: 'dashboard' },
+                      { name: 'Classes', icon: 'school' },
+                      { name: 'Quizzes', icon: 'quiz' },
+                      { name: 'Submissions', icon: 'assignment' },
+                      { name: 'Students', icon: 'group' },
+                    ].map((item, idx) => (
+                      <a key={idx} href="#" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
+                        <span className="material-symbols-outlined">{item.icon}</span>
+                        <span className="text-sm tracking-normal">{item.name}</span>
+                      </a>
+                    ))}
+                    
+                    <div className="my-4 border-t border-slate-100"></div>
+
+                    <a href="#" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
+                      <span className="material-symbols-outlined">settings</span>
+                      <span className="text-sm tracking-normal">Settings</span>
+                    </a>
+                  </nav>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <h1 className="font-['Inter'] font-bold tracking-tight text-2xl font-extrabold tracking-[-1.5px] select-none cursor-pointer" onClick={() => router.push('/student/dashboard')}>
+              <span className="text-slate-900">Tiki</span><span className="text-[#0F766E]">Taka</span>
+            </h1>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-slate-500">person</span>
+            )}
+          </div>
         </div>
+      </header>
 
-        {/* Progress */}
-        <Progress value={progressPercent} className="h-2" />
+      {/* Main Content Canvas */}
+      <main className="pt-24 pb-32 px-4 max-w-[640px] mx-auto min-h-screen flex flex-col gap-6">
+        
+        {/* QUIZ CONTEXT CARD */}
+        <section className="bg-white p-5 rounded-xl flex items-center justify-between shadow-[0_4px_16px_rgba(17,24,39,0.04)]">
+          <div className="flex flex-col">
+            <span className="font-label text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-1">Current Course</span>
+            <h2 className="text-slate-900 font-headline font-bold text-[16px]">{className || 'Practice Quiz'}</h2>
+          </div>
+          <div className="relative flex items-center justify-center">
+            {/* Circular Progress Indicator */}
+            <svg className="w-12 h-12 transform -rotate-90">
+              <circle className="text-slate-100" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeWidth="4"></circle>
+              <circle className="text-[#0f766e] transition-all duration-500 ease-out" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeWidth="4"></circle>
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-[10px] font-bold text-slate-900">{currentIndex + 1}/{questions.length}</span>
+            </div>
+          </div>
+        </section>
 
-        {/* Question Card */}
+        {/* QUESTION CARD */}
         {currentQuestion && (
-          <Card>
-            <CardContent className="py-6 space-y-6">
-              {/* Question text */}
-              <p className="text-base font-medium text-foreground leading-relaxed">
+          <section className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)]">
+            <div className="mb-8">
+              <span className="font-label text-[11px] font-bold uppercase tracking-[0.8px] text-[#005c55] mb-2 block">
+                Question {String(currentIndex + 1).padStart(2, '0')}
+              </span>
+              <h3 className="text-slate-900 font-headline font-bold text-[20px] leading-tight tracking-[-0.5px]">
                 {currentQuestion.question}
-              </p>
+              </h3>
+            </div>
+            
+            {/* Options (8px radius, 44px height rows) */}
+            <div className="flex flex-col gap-3">
+              {currentQuestion.options.map((option, optIdx) => {
+                const letter = ['A', 'B', 'C', 'D'][optIdx];
+                const isSelected = currentAnswer === letter;
 
-              {/* Options */}
-              <div className="space-y-3">
-                {currentQuestion.options.map((option, optIdx) => {
-                  const letter = ['A', 'B', 'C', 'D'][optIdx];
-                  const isSelected = currentAnswer === letter;
-
+                if (isSelected) {
                   return (
                     <button
                       key={optIdx}
                       type="button"
-                      onClick={() => handleSelectAnswer(letter)}
-                      className={cn(
-                        'w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors',
-                        'hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                        isSelected
-                          ? 'border-primary bg-primary/5 text-foreground font-medium'
-                          : 'border-muted/60 text-foreground'
-                      )}
+                      className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-teal-50 border border-[#0f766e]/20 text-slate-900 w-full text-left transition-all active:scale-[0.98]"
                     >
-                      {option}
+                      <div className="w-6 h-6 rounded-full bg-[#0f766e] shrink-0 flex items-center justify-center text-white text-[12px] font-bold">{letter}</div>
+                      <span className="text-[14px] font-semibold leading-snug">{option}</span>
+                      <span className="material-symbols-outlined ml-auto text-[#0f766e] text-[20px] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                     </button>
                   );
-                })}
-              </div>
+                }
 
-              {/* Hint */}
-              <details className="group">
-                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-                  <Lightbulb className="h-3.5 w-3.5" />
-                  Show hint
-                </summary>
-                <p className="mt-2 text-sm text-muted-foreground bg-muted/30 px-3 py-2 rounded-lg">
-                  {currentQuestion.hint}
-                </p>
-              </details>
-            </CardContent>
-          </Card>
+                return (
+                  <button
+                    key={optIdx}
+                    type="button"
+                    onClick={() => handleSelectAnswer(letter)}
+                    className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-slate-50 border border-transparent text-slate-900 w-full text-left transition-all hover:bg-slate-100 active:scale-[0.98]"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-slate-600 text-[12px] font-bold">{letter}</div>
+                    <span className="text-[14px] font-medium leading-snug">{option}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         )}
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            onClick={handlePrev}
-            disabled={currentIndex === 0}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-          </Button>
+        {/* Contextual Hint / Info */}
+        {currentQuestion && currentQuestion.hint && (
+          <div className="bg-[#f3f4f5] p-4 rounded-xl flex items-start gap-3">
+            <span className="material-symbols-outlined text-slate-400 text-[20px] shrink-0">lightbulb</span>
+            <p className="text-[13px] text-[#3e4947] italic">
+              {currentQuestion.hint}
+            </p>
+          </div>
+        )}
+      </main>
 
-          {isLastQuestion ? (
-            <Button
-              onClick={handleSubmit}
-              disabled={!allAnswered}
-            >
-              Submit Quiz
-            </Button>
-          ) : (
-            <Button
-              onClick={handleNext}
-              disabled={!currentAnswer}
-            >
-              Next <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+      {/* BottomNavBar */}
+      <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-white shadow-[0_-4px_16px_rgba(17,24,39,0.04)] z-50">
+        
+        {/* Previous Button */}
+        <button
+          onClick={handlePrev}
+          disabled={currentIndex === 0}
+          className={cn(
+            "flex flex-col items-center justify-center px-8 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px]",
+            currentIndex === 0 ? "text-slate-300 cursor-not-allowed opacity-50" : "text-slate-400 hover:text-slate-600"
           )}
-        </div>
-
-        {/* Answer count indicator */}
-        <p className="text-center text-xs text-muted-foreground">
-          {Object.keys(answers).length} of {questions.length} answered
-        </p>
-      </div>
-    </>
+        >
+          <span className="material-symbols-outlined mb-1">arrow_back</span>
+          Previous
+        </button>
+        
+        {/* Next/Submit Button */}
+        {isLastQuestion ? (
+          <button
+            onClick={handleSubmit}
+            disabled={!allAnswered}
+            className={cn(
+              "flex flex-col items-center justify-center bg-[#0f766e] text-white rounded-xl px-12 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px] shadow-lg shadow-teal-900/10",
+              !allAnswered && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <span className="material-symbols-outlined mb-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+            Submit
+          </button>
+        ) : (
+          <button
+            onClick={handleNext}
+            disabled={!currentAnswer}
+            className={cn(
+               "flex flex-col items-center justify-center bg-[#0f766e] text-white rounded-xl px-12 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px] shadow-lg shadow-teal-900/10",
+               !currentAnswer && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <span className="material-symbols-outlined mb-1" style={{ fontVariationSettings: "'FILL' 1" }}>arrow_forward</span>
+            Next
+          </button>
+        )}
+      </nav>
+    </div>
   );
 }
 

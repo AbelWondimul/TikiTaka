@@ -31,11 +31,48 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Loader2, BookOpen, UserPlus, Brain, Clock, Trophy } from 'lucide-react';
+import { Loader2, BookOpen, UserPlus, Brain, Clock, Trophy, CheckCircle2, Hourglass, FlaskConical, Sigma, LayoutDashboard, ClipboardList, LineChart, GraduationCap, Sparkles, CalendarCheck, MessageSquare } from 'lucide-react';
+
+// Map class index to icon colors for variety
+const CLASS_ICON_COLORS = [
+  { bg: 'bg-teal-50 dark:bg-teal-900/20', icon: 'text-teal-600 dark:text-teal-400', gradient: 'from-teal-600 to-teal-500' },
+  { bg: 'bg-orange-50 dark:bg-orange-900/20', icon: 'text-orange-600 dark:text-orange-400', gradient: 'from-orange-600 to-orange-500' },
+  { bg: 'bg-violet-50 dark:bg-violet-900/20', icon: 'text-violet-600 dark:text-violet-400', gradient: 'from-violet-600 to-violet-500' },
+  { bg: 'bg-blue-50 dark:bg-blue-900/20', icon: 'text-blue-600 dark:text-blue-400', gradient: 'from-blue-600 to-blue-500' },
+];
+
+const CLASS_ICONS = [FlaskConical, Sigma, Brain, BookOpen];
+
+function formatRelativeDate(date) {
+  if (!date) return 'N/A';
+  const d = date?.toDate ? date.toDate() : new Date(date);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatDueDate(date) {
+  if (!date) return null;
+  const d = date?.toDate ? date.toDate() : new Date(date);
+  const now = new Date();
+  const diffMs = d - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { label: 'Overdue', urgent: true };
+  if (diffDays === 0) return { label: 'Due today', urgent: true };
+  if (diffDays === 1) return { label: 'Due tomorrow', urgent: true };
+  if (diffDays <= 7) return { label: `Due in ${diffDays} days`, urgent: false };
+  return { label: `Due ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, urgent: false };
+}
 
 const joinFormSchema = z.object({
   classCode: z.string().length(6, { message: "Class code must be exactly 6 characters." }).toUpperCase(),
 });
+
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 function StudentDashboard() {
   const { user } = useAuth();
@@ -46,14 +83,18 @@ function StudentDashboard() {
   const [joinError, setJoinError] = useState(null);
   const [joinSuccess, setJoinSuccess] = useState(null);
 
-  // Quiz History State
-  const [quizHistory, setQuizHistory] = useState([]);
-  const [isQuizHistoryLoading, setIsQuizHistoryLoading] = useState(true);
+  // Recent Submissions State
+  const [recentSubmissions, setRecentSubmissions] = useState([]);
+  const [isSubmissionsLoading, setIsSubmissionsLoading] = useState(true);
 
   const joinForm = useForm({
     resolver: zodResolver(joinFormSchema),
     defaultValues: { classCode: "" },
   });
+
+  // Assignment State
+  const [upcomingAssignments, setUpcomingAssignments] = useState([]);
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
 
   const fetchEnrolledClasses = async () => {
     if (!user) return;
@@ -79,6 +120,44 @@ function StudentDashboard() {
 
       const fetchedClasses = await Promise.all(classPromises);
       setEnrolledClasses(fetchedClasses);
+
+      // Once classes are fetched, fetch assignments assigned to these classes
+      if (fetchedClasses.length > 0) {
+        setIsAssignmentsLoading(true);
+        // Using in up to 10 classes
+        const classIds = fetchedClasses.map(c => c.id).slice(0, 10);
+        const assignmentsQ = query(
+          collection(db, 'assignments'),
+          where('classId', 'in', classIds)
+        );
+        const assignmentsSnap = await getDocs(assignmentsQ);
+        
+        // Also fetch user's gradingJobs to filter out completed ones
+        const jobsQ = query(collection(db, 'gradingJobs'), where('studentId', '==', user.uid));
+        const jobsSnap = await getDocs(jobsQ);
+        const submittedAssignmentIds = jobsSnap.docs.map(d => d.data().assignmentId || d.data().rawPdfUrl /* temp fallback if string matched */);
+
+        const loadedAssignments = [];
+        assignmentsSnap.forEach(docSnap => {
+          const dat = docSnap.data();
+          // Ideally check if this assignmentId has already a grading job linked to it.
+          loadedAssignments.push({ id: docSnap.id, ...dat });
+        });
+        
+        // Sort by dueDate
+        loadedAssignments.sort((a, b) => {
+          const dA = a.dueDate?.toDate ? a.dueDate.toDate() : new Date("2099-01-01");
+          const dB = b.dueDate?.toDate ? b.dueDate.toDate() : new Date("2099-01-01");
+          return dA - dB;
+        });
+
+        setUpcomingAssignments(loadedAssignments);
+        setIsAssignmentsLoading(false);
+      } else {
+        setUpcomingAssignments([]);
+        setIsAssignmentsLoading(false);
+      }
+
     } catch (error) {
       console.error("Error fetching enrolled classes:", error);
     } finally {
@@ -86,37 +165,35 @@ function StudentDashboard() {
     }
   };
 
-  const fetchQuizHistory = async () => {
+  const fetchRecentSubmissions = async () => {
     if (!user) return;
     try {
-      setIsQuizHistoryLoading(true);
-      // Simple query: get student's quiz attempts, sort in memory to avoid composite index issues
+      setIsSubmissionsLoading(true);
       const q = query(
-        collection(db, 'quizAttempts'),
+        collection(db, 'gradingJobs'),
         where('studentId', '==', user.uid),
       );
-      const querySnapshot = await getDocs(q);
-      const attempts = [];
-      querySnapshot.forEach((docSnap) => {
-        attempts.push({ id: docSnap.id, ...docSnap.data() });
+      const snapshot = await getDocs(q);
+      const jobs = [];
+      snapshot.forEach((docSnap) => {
+        jobs.push({ id: docSnap.id, ...docSnap.data() });
       });
-      // Sort by createdAt descending in memory, take last 5
-      attempts.sort((a, b) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+      jobs.sort((a, b) => {
+        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate() : new Date(a.submittedAt || 0);
+        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate() : new Date(b.submittedAt || 0);
         return dateB - dateA;
       });
-      setQuizHistory(attempts.slice(0, 5));
+      setRecentSubmissions(jobs.slice(0, 5));
     } catch (error) {
-      console.error("Error fetching quiz history:", error);
+      console.error('Error fetching recent submissions:', error);
     } finally {
-      setIsQuizHistoryLoading(false);
+      setIsSubmissionsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchEnrolledClasses();
-    fetchQuizHistory();
+    fetchRecentSubmissions();
   }, [user]);
 
   async function onJoinSubmit(values) {
@@ -150,195 +227,355 @@ function StudentDashboard() {
     }
   }
 
-  // Helper to find class name for a quiz attempt
-  const getClassName = (classId) => {
-    const found = enrolledClasses.find((c) => c.id === classId);
-    return found ? found.name : 'Unknown Class';
-  };
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  // Compute how many assignments are due this week (next 7 days)
+  const assignmentsDueThisWeek = upcomingAssignments.filter(a => {
+    if (!a.dueDate) return false;
+    const d = a.dueDate?.toDate ? a.dueDate.toDate() : new Date(a.dueDate);
+    const diffDays = (d - today) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 7;
+  }).length;
 
   return (
     <>
       <Head>
-        <title>Student Dashboard - Automated PDF Grading Engine</title>
+        <title>Student Dashboard - TikiTaka</title>
       </Head>
       <Header />
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Student Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Join classes, submit assignments, and take adaptive quizzes.
-          </p>
+      
+      <div className="border-b bg-card">
+        <div className="max-w-5xl mx-auto px-6">
+          <Tabs defaultValue="dashboard" className="w-full">
+            <TabsList className="bg-transparent h-14 p-0 gap-8 justify-start">
+              <Link href="/student/dashboard" className="h-full">
+                <TabsTrigger 
+                  value="dashboard" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
+                >
+                  Dashboard
+                </TabsTrigger>
+              </Link>
+              <Link href="#" className="h-full">
+                <TabsTrigger 
+                  value="submissions" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+                >
+                  Submissions
+                </TabsTrigger>
+              </Link>
+              <Link href="#" className="h-full">
+                <TabsTrigger 
+                  value="quizzes" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+                >
+                  Quizzes
+                </TabsTrigger>
+              </Link>
+              <Link href="#" className="h-full">
+                <TabsTrigger 
+                  value="progress" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+                >
+                  Progress
+                </TabsTrigger>
+              </Link>
+              <Link href="/student/messages" className="h-full">
+                <TabsTrigger 
+                  value="messages" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
+                >
+                  Messages
+                </TabsTrigger>
+              </Link>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-6 py-6 pb-28 md:pb-10 space-y-8">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest font-semibold">
+          <LayoutDashboard className="h-3 w-3" />
+          <span>Dashboard</span>
         </div>
 
-        {/* My Classes Section */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">My Registered Classes</h2>
-          
+        {/* ── Welcome Card ── */}
+        <section>
+          <div className="relative overflow-hidden rounded-2xl bg-card border shadow-sm p-8 md:p-10">
+            <div className="absolute -right-20 -top-20 w-80 h-80 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute left-8 bottom-8 opacity-[0.05] pointer-events-none">
+              <Sparkles className="h-24 w-24 text-primary rotate-12" />
+            </div>
+            <div className="absolute right-12 top-12 opacity-[0.05] pointer-events-none">
+              <Sparkles className="h-16 w-16 text-primary -rotate-12" />
+            </div>
+            
+            <div className="relative z-10">
+              <Badge className="mb-6 bg-teal-50 text-teal-800 border-none px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest">
+                {dateLabel}
+              </Badge>
+              <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-foreground mb-4">
+                Welcome back{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}
+              </h1>
+              <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
+                You have <span className="font-semibold text-foreground">{assignmentsDueThisWeek}</span> assignment{assignmentsDueThisWeek !== 1 && 's'} due this week.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Enrolled Classes ── */}
+        <section className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold tracking-tight">Enrolled Classes</h2>
+          </div>
+
           {isLoading && enrolledClasses.length === 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="animate-pulse bg-muted/50 h-32" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {[1, 2].map((i) => (
+                <Card key={i} className="h-48 animate-pulse bg-muted/50 rounded-2xl" />
               ))}
             </div>
           ) : enrolledClasses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-xl bg-muted/10">
-              <BookOpen className="h-10 w-10 text-muted-foreground opacity-40 mb-3" />
-              <p className="text-sm font-medium text-foreground">No classes yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Join a class using the form below to get started.</p>
+            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed rounded-2xl bg-muted/5">
+              <BookOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
+              <p className="text-base font-medium">No classes yet</p>
+              <p className="text-sm text-muted-foreground max-w-xs mx-auto">Join a class using the form below to see your coursework.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {enrolledClasses.map((c) => (
-                <Card key={c.id}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">{c.name}</CardTitle>
-                    <CardDescription>
-                      {c.studentIds?.length || 0} students enrolled
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                      <Button asChild variant="outline" className="flex-1">
-                        <Link href={`/student/quizzes/${c.id}`}>
-                          View Quizzes
-                        </Link>
-                      </Button>
-                      <Button asChild className="flex-1">
-                        <Link href={`/student/class/${c.id}`}>
-                          View Assignments
-                        </Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {enrolledClasses.map((c, idx) => {
+                const color = CLASS_ICON_COLORS[idx % CLASS_ICON_COLORS.length];
+                const ClassIcon = CLASS_ICONS[idx % CLASS_ICONS.length];
+                return (
+                  <Card key={c.id} className="flex flex-col justify-between shadow-sm rounded-2xl hover:shadow-md transition-all border-border/50">
+                    <CardHeader className="pb-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center shadow-sm', color.bg)}>
+                          <ClassIcon className={cn('h-6 w-6', color.icon)} />
+                        </div>
+                        <Badge variant="outline" className="font-mono text-xs text-muted-foreground border-border/50">
+                          {c.classCode || c.id.slice(0, 6).toUpperCase()}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-xl font-semibold mb-1">{c.name}</CardTitle>
+                      {c.teacherName && (
+                        <CardDescription className="text-sm font-medium">Instructor: {c.teacherName}</CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent className="pt-2">
+                      <div className="flex gap-3">
+                        <Button asChild className="flex-1 bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white hover:opacity-90 font-semibold rounded-xl h-11">
+                          <Link href={`/student/class/${c.id}`}>Open</Link>
+                        </Button>
+                        <Button asChild variant="outline" className="flex-1 border-border/50 hover:bg-accent h-11 rounded-xl">
+                          <Link href={`/student/class/${c.id}`}>Course Info</Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Join Class Section */}
-          <Card className="lg:col-span-1 border-primary/20 bg-primary/5 h-fit">
-            <CardHeader>
-              <CardTitle className="flex items-center text-lg">
-                <UserPlus className="w-5 h-5 mr-2 text-primary" />
-                Join a Class
-              </CardTitle>
-              <CardDescription>
-                Enter the 6-character code from your teacher.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...joinForm}>
-                <form onSubmit={joinForm.handleSubmit(onJoinSubmit)} className="space-y-4">
-                  <FormField
-                    control={joinForm.control}
-                    name="classCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Class Code</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="e.g. A1B2C3" 
-                            className="font-mono uppercase"
-                            maxLength={6}
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  {joinError && <Alert variant="destructive" className="py-2 px-3"><AlertDescription className="text-xs">{joinError}</AlertDescription></Alert>}
-                  {joinSuccess && <Alert className="py-2 px-3 bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"><AlertDescription className="text-xs">{joinSuccess}</AlertDescription></Alert>}
-
-                  <Button type="submit" className="w-full" disabled={joinForm.formState.isSubmitting}>
-                    {joinForm.formState.isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Joining...</> : "Join Class"}
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          {/* Quiz History Section */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center text-lg">
-                <Trophy className="w-5 h-5 mr-2 text-primary" />
-                Quiz History
-              </CardTitle>
-              <CardDescription>
-                Your recent adaptive quiz attempts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isQuizHistoryLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+        {/* ── Assignments, Submissions & Join ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Left Column (Assignments & Submissions) */}
+          <div className="lg:col-span-2 space-y-10">
+            
+            {/* Upcoming Assignments */}
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold tracking-tight">Upcoming Assignments</h2>
+              {isAssignmentsLoading ? (
+                <div className="flex gap-5 overflow-x-auto pb-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="min-w-[280px] h-32 rounded-2xl bg-muted/50 animate-pulse flex-shrink-0" />
                   ))}
                 </div>
-              ) : quizHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <Brain className="h-10 w-10 text-muted-foreground opacity-40 mb-3" />
-                  <p className="text-sm font-medium text-foreground">No quizzes taken yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Start a quiz from one of your enrolled classes above.
-                  </p>
+              ) : upcomingAssignments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed rounded-2xl bg-muted/5">
+                  <CalendarCheck className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                  <p className="text-base font-medium">No upcoming assignments</p>
+                  <p className="text-sm text-muted-foreground">You are all caught up!</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {quizHistory.map((attempt) => (
-                    <Link
-                      key={attempt.id}
-                      href={`/student/quizzes/${attempt.classId}/${attempt.id}`}
-                      className="flex items-center justify-between px-4 py-3 rounded-lg border border-muted/60 bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer"
-                    >
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium text-foreground">
-                          {getClassName(attempt.classId)}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {attempt.createdAt?.toDate
-                            ? attempt.createdAt.toDate().toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })
-                            : 'N/A'}
+                <div className="flex flex-col gap-4">
+                  {upcomingAssignments.map((assignment) => {
+                    const dueInfo = formatDueDate(assignment.dueDate);
+                    const classObj = enrolledClasses.find(c => c.id === assignment.classId);
+                    
+                    return (
+                      <div
+                        key={assignment.id}
+                        className="bg-card border border-border/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between shadow-sm hover:shadow-md transition-all gap-4"
+                      >
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                             <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300">
+                               {classObj?.classCode || 'CLASS'}
+                             </Badge>
+                             {dueInfo && (
+                               <Badge variant={dueInfo.urgent ? 'destructive' : 'outline'} className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                 {dueInfo.label}
+                               </Badge>
+                             )}
+                          </div>
+                          <h3 className="text-base font-semibold leading-tight text-foreground">
+                            {assignment.title}
+                          </h3>
+                          <p className="text-sm font-medium text-muted-foreground mt-1">
+                            {assignment.totalPoints || 100} Points
+                          </p>
                         </div>
+                        <Button className="shrink-0 rounded-xl bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white hover:opacity-90" asChild>
+                          <Link href={`/student/class/${assignment.classId}`}>
+                            Start Assignment
+                          </Link>
+                        </Button>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {attempt.topicGaps && attempt.topicGaps.length > 0 && (
-                          <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-                            {attempt.topicGaps.length} topic{attempt.topicGaps.length !== 1 ? 's' : ''} to review
-                          </Badge>
-                        )}
-                        <span
-                          className={cn(
-                            'text-sm font-bold tabular-nums',
-                            attempt.score >= 70
-                              ? 'text-green-600 dark:text-green-400'
-                              : attempt.score >= 40
-                                ? 'text-yellow-600 dark:text-yellow-400'
-                                : 'text-destructive'
-                          )}
-                        >
-                          {attempt.score}%
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Recent Submissions */}
+            <div className="space-y-5">
+              <h2 className="text-xl font-semibold tracking-tight">Recent Submissions</h2>
+              {isSubmissionsLoading ? (
+                <div className="flex gap-5 overflow-x-auto pb-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="min-w-[280px] h-40 rounded-2xl bg-muted/50 animate-pulse flex-shrink-0" />
+                  ))}
+                </div>
+              ) : recentSubmissions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-2xl bg-muted/5">
+                  <ClipboardList className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                  <p className="text-base font-medium">No submissions</p>
+                  <p className="text-sm text-muted-foreground">Submit assignments to track your progress.</p>
+                </div>
+              ) : (
+                <div className="flex gap-5 overflow-x-auto pb-4 -mx-1 px-1 custom-scrollbar">
+                  {recentSubmissions.map((job) => {
+                    const isGraded = job.score !== null && job.score !== undefined;
+                    return (
+                      <Link
+                        key={job.id}
+                        href={`/student/submission/${job.id}`}
+                        className="min-w-[280px] flex-shrink-0 bg-card border border-border/50 rounded-2xl p-6 flex flex-col shadow-sm hover:shadow-md transition-all group"
+                      >
+                        <div className="flex justify-between items-start mb-5">
+                          <Badge
+                            className={cn(
+                              'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border-none',
+                              isGraded 
+                                ? 'bg-primary/10 text-primary' 
+                                : 'bg-amber-100 text-amber-700'
+                            )}
+                          >
+                            {isGraded ? 'GRADED' : 'PENDING'}
+                          </Badge>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {formatRelativeDate(job.submittedAt)}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-semibold leading-tight mb-auto group-hover:text-primary transition-colors">
+                          {job.assignmentTitle || 'Assignment'}
+                        </h3>
+                        <div className="flex items-center justify-between pt-6 mt-4 border-t border-border/30">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className={cn('text-3xl font-bold tabular-nums tracking-tight', isGraded ? 'text-foreground' : 'text-muted-foreground/30')}>
+                              {isGraded ? job.score : '--'}
+                            </span>
+                            <span className="text-sm font-medium text-muted-foreground">/ {job.totalPoints || 100}</span>
+                          </div>
+                          {isGraded && (
+                            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                              <CheckCircle2 className="h-4 w-4 text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Join Class */}
+          <div className="space-y-5">
+            <h2 className="text-xl font-semibold tracking-tight">Join Class</h2>
+            <Card className="rounded-2xl border-primary/20 bg-primary/[0.02] shadow-sm">
+              <CardHeader className="pb-5">
+                <CardTitle className="flex items-center text-base font-semibold">
+                  <UserPlus className="w-5 h-5 mr-2 text-primary" />
+                  Enter Class Code
+                </CardTitle>
+                <CardDescription className="text-sm font-medium">
+                  Join a course to see your assignments.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...joinForm}>
+                  <form onSubmit={joinForm.handleSubmit(onJoinSubmit)} className="space-y-5">
+                    <FormField
+                      control={joinForm.control}
+                      name="classCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="CODE123"
+                              className="h-12 bg-background border-border/50 font-mono font-bold text-center text-lg tracking-widest uppercase rounded-xl"
+                              maxLength={6}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-xs font-medium" />
+                        </FormItem>
+                      )}
+                    />
+                    {joinError && <Alert variant="destructive" className="py-2 px-3 rounded-lg"><AlertDescription className="text-xs font-medium">{joinError}</AlertDescription></Alert>}
+                    {joinSuccess && <Alert className="py-2 px-3 bg-green-50 text-green-800 border-green-200 rounded-lg dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"><AlertDescription className="text-xs font-medium">{joinSuccess}</AlertDescription></Alert>}
+                    <Button type="submit" className="w-full h-12 rounded-xl font-bold text-base bg-primary hover:bg-primary/90 shadow-sm" disabled={joinForm.formState.isSubmitting}>
+                      {joinForm.formState.isSubmitting ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> JOINING...</> : 'JOIN CLASS'}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
+
+      {/* ── Bottom Navigation (Mobile) ── */}
+      <nav className="fixed bottom-0 left-0 w-full md:hidden flex justify-around items-center px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/50 z-50">
+        <Link href="/student/dashboard" className="flex flex-col items-center gap-1 text-primary">
+          <LayoutDashboard className="h-6 w-6" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Dashboard</span>
+        </Link>
+        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
+          <ClipboardList className="h-6 w-6" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Submissions</span>
+        </Link>
+        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
+          <Trophy className="h-6 w-6" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Quizzes</span>
+        </Link>
+        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
+          <LineChart className="h-6 w-6" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Progress</span>
+        </Link>
+        <Link href="/student/messages" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
+          <MessageSquare className="h-6 w-6" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Messages</span>
+        </Link>
+      </nav>
     </>
   );
 }
