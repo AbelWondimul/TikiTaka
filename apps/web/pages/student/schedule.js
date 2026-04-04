@@ -84,24 +84,18 @@ function StudentSchedule() {
         return;
       }
 
-      // 2. Fetch schedule blocks for those classes (batch by teacherIds)
-      const teacherIds = [...new Set(Object.values(classMap).map(c => c.teacherId).filter(Boolean))];
+      // 2. Fetch schedule blocks by classId (matches Firestore rules)
       let allBlocks = [];
-      for (let i = 0; i < teacherIds.length; i += 30) {
-        const batch = teacherIds.slice(i, i + 30);
-        const schedQ = query(collection(db, 'schedules'), where('teacherId', 'in', batch));
+      for (let i = 0; i < classIds.length; i += 10) {
+        const batch = classIds.slice(i, i + 10);
+        const schedQ = query(collection(db, 'schedules'), where('classId', 'in', batch));
         const schedSnap = await getDocs(schedQ);
-        schedSnap.forEach(d => {
-          const block = { id: d.id, ...d.data() };
-          // Only include blocks for classes the student is enrolled in
-          if (classIds.includes(block.classId)) {
-            allBlocks.push(block);
-          }
-        });
+        schedSnap.forEach(d => allBlocks.push({ id: d.id, ...d.data() }));
       }
       setScheduleBlocks(allBlocks);
 
       // 3. Fetch teacher names
+      const teacherIds = [...new Set(allBlocks.map(b => b.teacherId).filter(Boolean))];
       const names = {};
       await Promise.all(teacherIds.map(async (tid) => {
         try {

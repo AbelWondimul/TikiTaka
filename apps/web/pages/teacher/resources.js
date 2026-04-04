@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import {
   collection,
@@ -6,11 +6,14 @@ import {
   where,
   getDocs,
   deleteDoc,
+  addDoc,
   doc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
 
 import { db, storage } from '@/firebase';
+import { uploadWithProgress } from '@/lib/storageUtils';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
@@ -19,8 +22,13 @@ import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -29,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, FileText, Trash2, ExternalLink, Search, FolderOpen } from 'lucide-react';
+import { Loader2, FileText, Trash2, ExternalLink, Search, FolderOpen, Plus, Upload } from 'lucide-react';
 
 function TeacherResources() {
   const { user } = useAuth();
@@ -42,6 +50,18 @@ function TeacherResources() {
   const [activeTab, setActiveTab] = useState('knowledge'); // 'knowledge' | 'modules'
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [downloadUrls, setDownloadUrls] = useState({});
+
+  // Upload dialog
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadClassId, setUploadClassId] = useState('');
+  const [uploadTarget, setUploadTarget] = useState('knowledge'); // 'knowledge' | moduleId
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadIsSyllabus, setUploadIsSyllabus] = useState(false);
+  const [uploadStudentVisible, setUploadStudentVisible] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +105,40 @@ function TeacherResources() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadTitle.trim() || !uploadClassId) return;
+    setIsUploading(true);
+    try {
+      if (uploadTarget === 'knowledge') {
+        const docId = doc(collection(db, 'knowledgeBase')).id;
+        const storagePath = `knowledgeBase/${uploadClassId}/${docId}.pdf`;
+        await uploadWithProgress(storagePath, uploadFile, p => setUploadProgress(p));
+        await addDoc(collection(db, 'knowledgeBase'), {
+          docId, classId: uploadClassId, teacherId: user.uid,
+          title: uploadTitle.trim(), storageUrl: storagePath,
+          isSyllabus: uploadIsSyllabus, uploadedAt: serverTimestamp(),
+        });
+      } else {
+        // Upload to a module
+        const docId = doc(collection(db, 'moduleResources')).id;
+        const storagePath = `moduleResources/${uploadClassId}/${docId}.pdf`;
+        await uploadWithProgress(storagePath, uploadFile, p => setUploadProgress(p));
+        const resData = {
+          classId: uploadClassId, teacherId: user.uid, moduleId: uploadTarget,
+          type: 'pdf', title: uploadTitle.trim(), storagePath,
+          url: null, forKnowledgeBase: false, studentVisible: uploadStudentVisible,
+          createdAt: serverTimestamp(),
+        };
+        await addDoc(collection(db, 'moduleResources'), resData);
+      }
+      setIsUploadOpen(false);
+      setUploadTitle(''); setUploadFile(null); setUploadIsSyllabus(false); setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      fetchData();
+    } catch (err) { console.error('Upload error:', err); }
+    finally { setIsUploading(false); }
   };
 
   const handleView = async (kbDoc) => {
@@ -131,11 +185,16 @@ function TeacherResources() {
       </Head>
 
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Resources</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            All resources across your classes — knowledge base docs and weekly module materials.
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Resources</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              All resources across your classes — knowledge base docs and weekly module materials.
+            </p>
+          </div>
+          <Button onClick={() => { setIsUploadOpen(true); setUploadClassId(classes[0]?.id || ''); setUploadTarget('knowledge'); }} className="rounded-xl">
+            <Upload className="h-4 w-4 mr-2" /> Upload
+          </Button>
         </div>
 
         {/* Tabs */}
@@ -339,6 +398,72 @@ function TeacherResources() {
           {kbDocs.length} knowledge base doc{kbDocs.length !== 1 ? 's' : ''} · {moduleResources.length} module resource{moduleResources.length !== 1 ? 's' : ''}
         </p>
       </div>
+
+      {/* Upload Dialog */}
+      <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Resource</DialogTitle>
+            <DialogDescription>Upload a PDF to a knowledge base or a weekly module.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Class</Label>
+              <Select value={uploadClassId} onValueChange={(v) => { setUploadClassId(v); setUploadTarget('knowledge'); }}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select class" /></SelectTrigger>
+                <SelectContent>
+                  {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Upload To</Label>
+              <Select value={uploadTarget} onValueChange={setUploadTarget}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="knowledge">Knowledge Base (AI Grading)</SelectItem>
+                  {modules.filter(m => m.classId === uploadClassId).map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="e.g. Chapter 5 Notes" className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label>PDF File</Label>
+              <Input type="file" accept=".pdf" ref={fileInputRef} onChange={e => setUploadFile(e.target.files?.[0] || null)} className="rounded-xl cursor-pointer" />
+            </div>
+            {uploadTarget === 'knowledge' && (
+              <div className="flex items-center justify-between">
+                <div><Label className="text-sm">Mark as Syllabus</Label></div>
+                <Switch checked={uploadIsSyllabus} onCheckedChange={setUploadIsSyllabus} />
+              </div>
+            )}
+            {uploadTarget !== 'knowledge' && (
+              <div className="flex items-center justify-between">
+                <div><Label className="text-sm">Visible to Students</Label></div>
+                <Switch checked={uploadStudentVisible} onCheckedChange={setUploadStudentVisible} />
+              </div>
+            )}
+            {isUploading && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground"><span>Uploading...</span><span>{Math.round(uploadProgress)}%</span></div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsUploadOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={handleUpload} disabled={isUploading || !uploadFile || !uploadTitle.trim() || !uploadClassId} className="rounded-xl">
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TeacherLayout>
   );
 }

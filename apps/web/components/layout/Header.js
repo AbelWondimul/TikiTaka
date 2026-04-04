@@ -1,3 +1,4 @@
+import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/firebase';
@@ -22,6 +23,7 @@ import { useState } from 'react';
 
 export default function Header() {
   const { user, role } = useAuth();
+  const router = useRouter();
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   const handleLogout = async () => {
@@ -82,7 +84,7 @@ export default function Header() {
                   <User className="mr-2 h-4 w-4" />
                   <span>Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push(role === 'teacher' ? '/teacher/settings' : '/student/settings')}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>

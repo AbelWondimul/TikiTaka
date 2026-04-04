@@ -16,7 +16,7 @@ const SIDEBAR_ITEMS = [
   { href: '/teacher/submissions', label: 'Submissions', icon: 'assignment', key: 'submissions' },
   { href: '/teacher/messages', label: 'Messages', icon: 'chat', key: 'messages' },
   { href: '/teacher/students', label: 'Students', icon: 'group', key: 'students' },
-  { href: '#', label: 'Settings', icon: 'settings', key: 'settings' },
+  { href: '/teacher/settings', label: 'Settings', icon: 'settings', key: 'settings' },
 ];
 
 export default function TeacherLayout({ children, activePage = 'dashboard' }) {

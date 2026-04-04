@@ -149,10 +149,21 @@ function StudentDashboard() {
   // Extension due dates { assignmentId: Date }
   const [extensionDueDates, setExtensionDueDates] = useState({});
 
+  // User settings
+  const [chatbotEnabled, setChatbotEnabled] = useState(true);
+
   const fetchEnrolledClasses = async () => {
     if (!user) return;
     try {
       setIsLoading(true);
+      // Load user settings
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const prefs = userDoc.data().settings || {};
+          setChatbotEnabled(prefs.chatbotEnabled !== false);
+        }
+      } catch (_) {}
       const q = query(collection(db, 'classes'), where('studentIds', 'array-contains', user.uid));
       const querySnapshot = await getDocs(q);
       
@@ -352,18 +363,18 @@ function StudentDashboard() {
                   Dashboard
                 </TabsTrigger>
               </Link>
-              <Link href="#" className="h-full">
-                <TabsTrigger 
-                  value="submissions" 
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+              <Link href="/student/submissions" className="h-full">
+                <TabsTrigger
+                  value="submissions"
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
                 >
                   Submissions
                 </TabsTrigger>
               </Link>
-              <Link href="#" className="h-full">
-                <TabsTrigger 
-                  value="quizzes" 
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+              <Link href="/student/quizzes" className="h-full">
+                <TabsTrigger
+                  value="quizzes"
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
                 >
                   Quizzes
                 </TabsTrigger>
@@ -741,11 +752,13 @@ function StudentDashboard() {
       </nav>
 
       {/* Tika Chatbot */}
-      <TikaChatbot
-        enrolledClasses={enrolledClasses}
-        assignments={upcomingAssignments}
-        submissions={recentSubmissions}
-      />
+      {chatbotEnabled && (
+        <TikaChatbot
+          enrolledClasses={enrolledClasses}
+          assignments={upcomingAssignments}
+          submissions={recentSubmissions}
+        />
+      )}
     </>
   );
 }
