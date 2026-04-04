@@ -127,9 +127,6 @@ export default function Login() {
             </Link>
 
             <nav className="hidden md:flex items-center gap-8 font-['Manrope'] tracking-tight">
-              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Product</Link>
-              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Solutions</Link>
-              <Link href="#" className="text-[#181c1c] dark:text-slate-400 opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300">Pricing</Link>
             </nav>
             <div className="flex items-center gap-6 font-['Manrope'] tracking-tight">
               <button 
@@ -247,10 +244,10 @@ export default function Login() {
                 </div>
 
                 {!isLogin && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  <div className="pt-2">
                     <div className="space-y-1.5">
                       <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1">I am a</label>
-                      <select 
+                      <select
                         value={selectedRole}
                         onChange={(e) => setSelectedRole(e.target.value)}
                         className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white transition-all duration-300 rounded-t-lg outline-none"
@@ -258,15 +255,6 @@ export default function Login() {
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
                       </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1" htmlFor="invite">Invite Token</label>
-                      <input 
-                        id="invite" 
-                        type="text"
-                        placeholder="TK-0000" 
-                        className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
-                      />
                     </div>
                   </div>
                 )}
@@ -328,9 +316,8 @@ export default function Login() {
               © 2026 Tiki Taka AI. Precision in Pedagogy.
             </p>
             <div className="flex flex-wrap justify-center gap-8 font-['Inter'] text-xs tracking-widest uppercase">
-              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Privacy Policy</Link>
-              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Terms of Service</Link>
-              <Link href="#" className="text-slate-500 hover:text-[#003b5a] dark:hover:text-white transition-opacity opacity-100 hover:opacity-70">Contact Support</Link>
+              <span className="text-slate-500">Privacy Policy</span>
+              <span className="text-slate-500">Terms of Service</span>
             </div>
           </div>
         </footer>

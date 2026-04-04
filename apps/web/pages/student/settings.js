@@ -7,6 +7,7 @@ import { db, auth, storage } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import Header from '@/components/layout/Header';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,6 +134,7 @@ function StudentSettings() {
     <>
       <Head><title>Settings - TikiTaka</title></Head>
       <Header />
+      <StudentNavTabs active="" />
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
