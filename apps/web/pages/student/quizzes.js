@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Brain, Trophy, Target, Play, Clock, CheckCircle, ChevronRight } from 'lucide-react';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 function StudentQuizzes() {
   const { user } = useAuth();
@@ -76,6 +77,7 @@ function StudentQuizzes() {
     <>
       <Head><title>Quizzes - TikiTaka</title></Head>
       <Header />
+      <StudentNavTabs active="quizzes" />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Quizzes</h1>

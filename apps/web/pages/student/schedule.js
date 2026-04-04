@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Loader2, CalendarDays, FileText, Calendar, Copy, Check, ExternalLink } from 'lucide-react';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7);
@@ -230,6 +231,7 @@ function StudentSchedule() {
         <title>Schedule - TikiTaka</title>
       </Head>
       <Header />
+      <StudentNavTabs active="schedule" />
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div className="flex items-center justify-between">

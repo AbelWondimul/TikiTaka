@@ -31,8 +31,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, LineChart, Sparkles, CalendarCheck, MessageSquare, MoreVertical, LogOut, Trophy } from 'lucide-react';
 import TikaChatbot from '@/components/TikaChatbot';
 
@@ -351,62 +351,7 @@ function StudentDashboard() {
       </Head>
       <Header />
       
-      <div className="border-b bg-card">
-        <div className="max-w-5xl mx-auto px-6">
-          <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="bg-transparent h-14 p-0 gap-8 justify-start">
-              <Link href="/student/dashboard" className="h-full">
-                <TabsTrigger 
-                  value="dashboard" 
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Dashboard
-                </TabsTrigger>
-              </Link>
-              <Link href="/student/submissions" className="h-full">
-                <TabsTrigger
-                  value="submissions"
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Submissions
-                </TabsTrigger>
-              </Link>
-              <Link href="/student/quizzes" className="h-full">
-                <TabsTrigger
-                  value="quizzes"
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Quizzes
-                </TabsTrigger>
-              </Link>
-              <Link href="/student/progress" className="h-full">
-                <TabsTrigger
-                  value="progress"
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Progress
-                </TabsTrigger>
-              </Link>
-              <Link href="/student/schedule" className="h-full">
-                <TabsTrigger
-                  value="schedule"
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Schedule
-                </TabsTrigger>
-              </Link>
-              <Link href="/student/messages" className="h-full">
-                <TabsTrigger 
-                  value="messages" 
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
-                >
-                  Messages
-                </TabsTrigger>
-              </Link>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
+      <StudentNavTabs active="dashboard" />
 
       <div className="max-w-5xl mx-auto px-6 py-6 pb-28 md:pb-10 space-y-8">
         <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest font-semibold">

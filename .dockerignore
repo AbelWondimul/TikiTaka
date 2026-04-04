@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.git
+.firebase
+*.log
+.env.local
+.env
+dist
+build
+venv
+__pycache__

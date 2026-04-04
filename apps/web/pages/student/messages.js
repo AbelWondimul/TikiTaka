@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Loader2, MessageSquare, Send, ArrowLeft, BookOpen } from 'lucide-react';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 function StudentMessages() {
   const { user } = useAuth();
@@ -164,6 +165,7 @@ function StudentMessages() {
         <title>Messages - TikiTaka</title>
       </Head>
       <Header />
+      <StudentNavTabs active="messages" />
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         {!selectedClass ? (

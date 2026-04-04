@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, TrendingUp, CheckCircle2, BookOpen, Award, Flame, Target } from 'lucide-react';
+import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 function StudentProgress() {
   const { user } = useAuth();
@@ -121,6 +122,7 @@ function StudentProgress() {
     <>
       <Head><title>Progress - TikiTaka</title></Head>
       <Header />
+      <StudentNavTabs active="progress" />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">My Progress</h1>
