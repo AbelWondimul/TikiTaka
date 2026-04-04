@@ -28,6 +28,7 @@ import { uploadWithProgress } from '@/lib/storageUtils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import FileDropzone from '@/components/ui/file-dropzone';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
@@ -650,33 +651,14 @@ function StudentClassDetail() {
                           )}
 
                           <div className="space-y-3">
-                            <Label htmlFor="pdfFile" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submission</Label>
-                            <div className="relative group/upload">
-                              <Input
-                                id="pdfFile"
-                                type="file"
-                                accept=".pdf"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                disabled={isSubmittingJob}
-                                className="cursor-pointer file:cursor-pointer h-24 border-dashed border-2 hover:border-primary/50 transition-colors flex items-center justify-center text-center py-8"
-                              />
-                              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-muted-foreground group-hover/upload:text-primary transition-colors">
-                                {!uploadFile ? (
-                                  <>
-                                    <Upload className="h-6 w-6 mb-2" />
-                                    <p className="text-xs font-medium">Click to select or drag & drop PDF</p>
-                                    <p className="text-[10px] opacity-60">Maximum size 20MB</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FileText className="h-6 w-6 mb-2 text-primary" />
-                                    <p className="text-sm font-semibold text-foreground">{uploadFile.name}</p>
-                                    <p className="text-[10px] opacity-60">Ready to submit • {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submission</Label>
+                            <FileDropzone
+                              accept=".pdf"
+                              maxSize={20}
+                              file={uploadFile}
+                              onFileSelect={(f) => setUploadFile(f)}
+                              disabled={isSubmittingJob}
+                            />
                           </div>
 
                           {submitError && (

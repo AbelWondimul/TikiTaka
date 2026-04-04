@@ -270,8 +270,21 @@ function TeacherDashboard() {
               {isLoading ? (
                  <div className="col-span-full">Loading classes...</div>
               ) : classes.length === 0 ? (
-                 <div className="col-span-full bg-white p-8 text-center rounded-xl border border-dashed border-slate-300">
-                    <p className="text-slate-500">No classes found.</p>
+                 <div className="col-span-full bg-white p-12 text-center rounded-xl border border-dashed border-slate-300 space-y-4">
+                    <div className="h-16 w-16 mx-auto bg-teal-50 rounded-2xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-teal-600 text-3xl">school</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800">Welcome to TikiTaka!</h3>
+                      <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">Create your first class to get started. Upload a knowledge base, post assignments, and let AI handle the grading.</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 pt-2">
+                      <div className="flex items-center gap-6 text-xs text-slate-400">
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">1</span> Create a Class</span>
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">2</span> Upload Materials</span>
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">3</span> Assign Work</span>
+                      </div>
+                    </div>
                  </div>
               ) : (
                 classes.filter(c => !c.archived).map((c) => (

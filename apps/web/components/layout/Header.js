@@ -5,7 +5,7 @@ import { auth } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { User, LogOut, Settings } from 'lucide-react';
+import { User, LogOut, Settings, Moon, Sun } from 'lucide-react';
 import Logo from './Logo';
 import NotificationDropdown from './NotificationDropdown';
 import { Badge } from '@/components/ui/badge';
@@ -57,7 +57,19 @@ export default function Header() {
           </nav>
         )}
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground h-9 w-9"
+            onClick={() => {
+              const isDark = document.documentElement.classList.toggle('dark');
+              localStorage.setItem('tikitaka-theme', isDark ? 'dark' : 'light');
+            }}
+          >
+            <Sun className="h-4 w-4 hidden dark:block" />
+            <Moon className="h-4 w-4 block dark:hidden" />
+          </Button>
           <NotificationDropdown />
 
           <DropdownMenu>

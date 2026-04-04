@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { getRelativeTime } from '@/lib/dateUtils';
@@ -300,11 +300,26 @@ export default function NotificationDropdown({ variant = 'default' }) {
         {/* Header */}
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground tracking-tight">Notifications</h3>
-          {notifications.length > 0 && (
+          <div className="flex items-center gap-3">
+            {notifications.some(n => n.unread) && (
+              <button
+                className="text-[10px] font-semibold text-primary hover:underline"
+                onClick={async () => {
+                  const unreadNotifs = notifications.filter(n => n.unread && n.id.startsWith('notif-'));
+                  await Promise.all(unreadNotifs.map(n =>
+                    updateDoc(doc(db, 'notifications', n.id.replace('notif-', '')), { read: true }).catch(() => {})
+                  ));
+                  setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+                  setHasUnread(false);
+                }}
+              >
+                Mark all read
+              </button>
+            )}
             <span className="text-[11px] font-semibold text-muted-foreground">
               {notifications.filter(n => n.unread).length || 0} new
             </span>
-          )}
+          </div>
         </div>
 
         {/* Body */}

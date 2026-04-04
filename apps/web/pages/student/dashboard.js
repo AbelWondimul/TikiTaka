@@ -397,10 +397,19 @@ function StudentDashboard() {
               ))}
             </div>
           ) : enrolledClasses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed rounded-2xl bg-muted/5">
-              <BookOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
-              <p className="text-base font-medium">No classes yet</p>
-              <p className="text-sm text-muted-foreground max-w-xs mx-auto">Join a class using the form below to see your coursework.</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-2xl bg-muted/5 space-y-4">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <BookOpen className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Welcome to TikiTaka!</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">Get started by joining your first class. Ask your teacher for a 6-character class code, then enter it in the "Join Class" form on the right.</p>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
+                <span className="flex items-center gap-1.5"><span className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">1</span> Enter Code</span>
+                <span className="flex items-center gap-1.5"><span className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">2</span> View Assignments</span>
+                <span className="flex items-center gap-1.5"><span className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">3</span> Submit & Get Graded</span>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
 import { useAuth } from '@/lib/auth-context';
@@ -22,6 +22,11 @@ const SIDEBAR_ITEMS = [
 export default function TeacherLayout({ children, activePage = 'dashboard' }) {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+  }, []);
 
   return (
     <>
@@ -65,6 +70,14 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
         </div>
         <div className="flex items-center space-x-3 sm:space-x-6">
           <div className="flex items-center space-x-2 sm:space-x-4 text-slate-600">
+            <button
+              className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors"
+              onClick={() => {
+                const dark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('tikitaka-theme', dark ? 'dark' : 'light');
+                setIsDark(dark);
+              }}
+            >{isDark ? 'light_mode' : 'dark_mode'}</button>
             <NotificationDropdown variant="material" />
             <span className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors hidden sm:block">help</span>
             <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-200 border border-slate-200">
