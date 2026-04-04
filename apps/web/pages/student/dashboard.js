@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { z } from 'zod';
 import { 
   collection, 
   query, 
@@ -13,25 +13,28 @@ import {
   doc, 
   updateDoc, 
   arrayUnion,
-  orderBy,
-  limit,
+  arrayRemove,
+  addDoc,
   serverTimestamp
 } from 'firebase/firestore';
 
-import { db } from '@/firebase';
+import { db, storage } from '@/firebase';
+import { ref, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import Header from '@/components/layout/Header';
 import { getClassByCode } from '@/lib/classUtils';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { Loader2, BookOpen, UserPlus, Brain, Clock, Trophy, CheckCircle2, Hourglass, FlaskConical, Sigma, LayoutDashboard, ClipboardList, LineChart, GraduationCap, Sparkles, CalendarCheck, MessageSquare } from 'lucide-react';
+import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, LineChart, Sparkles, CalendarCheck, MessageSquare, MoreVertical, LogOut, Trophy } from 'lucide-react';
+import TikaChatbot from '@/components/TikaChatbot';
 
 // Map class index to icon colors for variety
 const CLASS_ICON_COLORS = [
@@ -72,8 +75,6 @@ const joinFormSchema = z.object({
   classCode: z.string().length(6, { message: "Class code must be exactly 6 characters." }).toUpperCase(),
 });
 
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 function StudentDashboard() {
   const { user } = useAuth();
   const [enrolledClasses, setEnrolledClasses] = useState([]);
@@ -82,6 +83,52 @@ function StudentDashboard() {
   // Join Class State
   const [joinError, setJoinError] = useState(null);
   const [joinSuccess, setJoinSuccess] = useState(null);
+
+  // Class menu state
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [leaveConfirmId, setLeaveConfirmId] = useState(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLeaveClass = async (classId) => {
+    try {
+      const classToLeave = enrolledClasses.find(c => c.id === classId);
+
+      // Remove from studentIds and add to archivedStudents
+      await updateDoc(doc(db, 'classes', classId), {
+        studentIds: arrayRemove(user.uid),
+        archivedStudents: arrayUnion(user.uid),
+      });
+
+      // Send notification to teacher
+      if (classToLeave?.teacherId) {
+        await addDoc(collection(db, 'notifications'), {
+          senderId: user.uid,
+          recipientId: classToLeave.teacherId,
+          notifType: 'student_left',
+          title: `${user.displayName || user.email || 'A student'} left ${classToLeave.name || 'a class'}`,
+          message: `Student profile has been archived. You can reinvite or remove them from the class settings.`,
+          href: `/teacher/class/${classId}`,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      setEnrolledClasses(prev => prev.filter(c => c.id !== classId));
+      setLeaveConfirmId(null);
+    } catch (err) {
+      console.error('Error leaving class:', err);
+    }
+  };
 
   // Recent Submissions State
   const [recentSubmissions, setRecentSubmissions] = useState([]);
@@ -95,6 +142,12 @@ function StudentDashboard() {
   // Assignment State
   const [upcomingAssignments, setUpcomingAssignments] = useState([]);
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
+
+  // Syllabus URLs per class { classId: downloadUrl }
+  const [syllabusUrls, setSyllabusUrls] = useState({});
+
+  // Extension due dates { assignmentId: Date }
+  const [extensionDueDates, setExtensionDueDates] = useState({});
 
   const fetchEnrolledClasses = async () => {
     if (!user) return;
@@ -120,6 +173,44 @@ function StudentDashboard() {
 
       const fetchedClasses = await Promise.all(classPromises);
       setEnrolledClasses(fetchedClasses);
+
+      // Parse extension due dates from all classes
+      const extDates = {};
+      fetchedClasses.forEach(c => {
+        const dueDatesMap = c.extensionDueDates || {};
+        Object.entries(dueDatesMap).forEach(([key, val]) => {
+          if (key.startsWith(user.uid + '_')) {
+            const assignId = key.slice(user.uid.length + 1);
+            extDates[assignId] = val?.toDate ? val.toDate() : new Date(val);
+          }
+        });
+      });
+      setExtensionDueDates(extDates);
+
+      // Fetch syllabus for each class
+      if (fetchedClasses.length > 0) {
+        const syllabusMap = {};
+        await Promise.all(fetchedClasses.map(async (c) => {
+          try {
+            const kbQ = query(
+              collection(db, 'knowledgeBase'),
+              where('classId', '==', c.id),
+              where('isSyllabus', '==', true),
+            );
+            const kbSnap = await getDocs(kbQ);
+            if (!kbSnap.empty) {
+              const syllabusDoc = kbSnap.docs[0].data();
+              if (syllabusDoc.storageUrl) {
+                const url = await getDownloadURL(ref(storage, syllabusDoc.storageUrl));
+                syllabusMap[c.id] = url;
+              }
+            }
+          } catch (err) {
+            console.error(`Error fetching syllabus for class ${c.id}:`, err);
+          }
+        }));
+        setSyllabusUrls(syllabusMap);
+      }
 
       // Once classes are fetched, fetch assignments assigned to these classes
       if (fetchedClasses.length > 0) {
@@ -207,6 +298,10 @@ function StudentDashboard() {
         setJoinError("Class not found. Please check the code and try again.");
         return;
       }
+      if (classData.invitesDisabled) {
+        setJoinError("This class is not accepting new students right now.");
+        return;
+      }
       if (classData.studentIds && classData.studentIds.includes(user.uid)) {
         setJoinError("You are already enrolled in this class.");
         return;
@@ -273,12 +368,20 @@ function StudentDashboard() {
                   Quizzes
                 </TabsTrigger>
               </Link>
-              <Link href="#" className="h-full">
-                <TabsTrigger 
-                  value="progress" 
-                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none opacity-50 cursor-not-allowed"
+              <Link href="/student/progress" className="h-full">
+                <TabsTrigger
+                  value="progress"
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
                 >
                   Progress
+                </TabsTrigger>
+              </Link>
+              <Link href="/student/schedule" className="h-full">
+                <TabsTrigger
+                  value="schedule"
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium transition-none"
+                >
+                  Schedule
                 </TabsTrigger>
               </Link>
               <Link href="/student/messages" className="h-full">
@@ -349,15 +452,36 @@ function StudentDashboard() {
                 const color = CLASS_ICON_COLORS[idx % CLASS_ICON_COLORS.length];
                 const ClassIcon = CLASS_ICONS[idx % CLASS_ICONS.length];
                 return (
-                  <Card key={c.id} className="flex flex-col justify-between shadow-sm rounded-2xl hover:shadow-md transition-all border-border/50">
+                  <Card key={c.id} className="flex flex-col justify-between shadow-sm rounded-2xl hover:shadow-md transition-all border-border/50 relative">
                     <CardHeader className="pb-4">
                       <div className="flex justify-between items-start mb-4">
                         <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center shadow-sm', color.bg)}>
                           <ClassIcon className={cn('h-6 w-6', color.icon)} />
                         </div>
-                        <Badge variant="outline" className="font-mono text-xs text-muted-foreground border-border/50">
-                          {c.classCode || c.id.slice(0, 6).toUpperCase()}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono text-xs text-muted-foreground border-border/50">
+                            {c.classCode || c.id.slice(0, 6).toUpperCase()}
+                          </Badge>
+                          <div className="relative" ref={openMenuId === c.id ? menuRef : null}>
+                            <button
+                              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                              onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === c.id ? null : c.id); setLeaveConfirmId(null); }}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                            {openMenuId === c.id && (
+                              <div className="absolute right-0 top-8 z-50 w-44 bg-popover rounded-xl shadow-xl border py-1 animate-in fade-in zoom-in-95 duration-150">
+                                <button
+                                  className="w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 flex items-center gap-2.5 transition-colors"
+                                  onClick={() => { setLeaveConfirmId(c.id); setOpenMenuId(null); }}
+                                >
+                                  <LogOut className="h-4 w-4" />
+                                  Leave Class
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <CardTitle className="text-xl font-semibold mb-1">{c.name}</CardTitle>
                       {c.teacherName && (
@@ -365,14 +489,52 @@ function StudentDashboard() {
                       )}
                     </CardHeader>
                     <CardContent className="pt-2">
-                      <div className="flex gap-3">
-                        <Button asChild className="flex-1 bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white hover:opacity-90 font-semibold rounded-xl h-11">
-                          <Link href={`/student/class/${c.id}`}>Open</Link>
-                        </Button>
-                        <Button asChild variant="outline" className="flex-1 border-border/50 hover:bg-accent h-11 rounded-xl">
-                          <Link href={`/student/class/${c.id}`}>Course Info</Link>
-                        </Button>
-                      </div>
+                      {leaveConfirmId === c.id ? (
+                        <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4 space-y-3">
+                          <p className="text-sm font-medium text-destructive">Leave "{c.name}"? You'll lose access to assignments and grades.</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="rounded-xl"
+                              onClick={() => handleLeaveClass(c.id)}
+                            >
+                              Leave
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-xl"
+                              onClick={() => setLeaveConfirmId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3">
+                          <Button asChild className="flex-1 bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white hover:opacity-90 font-semibold rounded-xl h-11">
+                            <Link href={`/student/class/${c.id}`}>Open</Link>
+                          </Button>
+                          {syllabusUrls[c.id] ? (
+                            <Button
+                              variant="outline"
+                              className="flex-1 border-border/50 hover:bg-accent h-11 rounded-xl"
+                              onClick={() => window.open(syllabusUrls[c.id], '_blank')}
+                            >
+                              Course Info
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              className="flex-1 border-border/50 h-11 rounded-xl opacity-50 cursor-not-allowed"
+                              disabled
+                            >
+                              Course Info
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -405,7 +567,8 @@ function StudentDashboard() {
               ) : (
                 <div className="flex flex-col gap-4">
                   {upcomingAssignments.map((assignment) => {
-                    const dueInfo = formatDueDate(assignment.dueDate);
+                    const effectiveDueDate = extensionDueDates[assignment.id] || assignment.dueDate;
+                    const dueInfo = formatDueDate(effectiveDueDate);
                     const classObj = enrolledClasses.find(c => c.id === assignment.classId);
                     
                     return (
@@ -428,7 +591,7 @@ function StudentDashboard() {
                             {assignment.title}
                           </h3>
                           <p className="text-sm font-medium text-muted-foreground mt-1">
-                            {assignment.totalPoints || 100} Points
+                            {classObj?.name || 'Class'} · {assignment.totalPoints || 100} Points
                           </p>
                         </div>
                         <Button className="shrink-0 rounded-xl bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white hover:opacity-90" asChild>
@@ -576,6 +739,13 @@ function StudentDashboard() {
           <span className="text-[10px] font-bold uppercase tracking-wider">Messages</span>
         </Link>
       </nav>
+
+      {/* Tika Chatbot */}
+      <TikaChatbot
+        enrolledClasses={enrolledClasses}
+        assignments={upcomingAssignments}
+        submissions={recentSubmissions}
+      />
     </>
   );
 }

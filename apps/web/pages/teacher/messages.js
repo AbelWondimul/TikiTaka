@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import {
   collection,
   query,
@@ -18,7 +19,7 @@ import {
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
-import Header from '@/components/layout/Header';
+import TeacherLayout from '@/components/layout/TeacherLayout';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,8 @@ import { Loader2, MessageSquare, Send, ArrowLeft, Inbox, Plus, Users, ChevronRig
 
 function TeacherMessages() {
   const { user } = useAuth();
+  const router = useRouter();
+  const hasAutoOpenedRef = useRef(false);
 
   const [conversations, setConversations] = useState([]);
   const [isLoadingConvs, setIsLoadingConvs] = useState(true);
@@ -73,6 +76,47 @@ function TeacherMessages() {
 
     return () => { if (convUnsubRef.current) convUnsubRef.current(); };
   }, [user]);
+
+  // Auto-open conversation if studentId & classId are in query params (from Students page)
+  useEffect(() => {
+    if (hasAutoOpenedRef.current || isLoadingConvs || !user || !router.isReady) return;
+    const { studentId, classId } = router.query;
+    if (!studentId || !classId) return;
+
+    hasAutoOpenedRef.current = true;
+
+    // Check if conversation already exists
+    const convId = `${classId}_${studentId}`;
+    const existing = conversations.find(c => c.id === convId);
+    if (existing) {
+      openConversation(existing);
+      return;
+    }
+
+    // Build a new conversation object and open it
+    const fetchAndOpen = async () => {
+      try {
+        const [studentDoc, classDoc] = await Promise.all([
+          getDoc(doc(db, 'users', studentId)),
+          getDoc(doc(db, 'classes', classId)),
+        ]);
+        const studentName = studentDoc.exists() ? (studentDoc.data().displayName || studentDoc.data().email || studentId) : studentId;
+        const className = classDoc.exists() ? (classDoc.data().name || classId) : classId;
+
+        openConversation({
+          id: convId,
+          classId,
+          className,
+          studentId,
+          studentName,
+          teacherId: user.uid,
+        });
+      } catch (err) {
+        console.error('Error auto-opening conversation:', err);
+      }
+    };
+    fetchAndOpen();
+  }, [isLoadingConvs, conversations, router.isReady, user]);
 
   const openConversation = async (conv) => {
     setSelectedConv(conv);
@@ -244,13 +288,12 @@ function TeacherMessages() {
   };
 
   return (
-    <>
+    <TeacherLayout activePage="messages">
       <Head>
         <title>Messages - TikiTaka</title>
       </Head>
-      <Header />
 
-      <div className="max-w-5xl mx-auto px-6 py-8 h-[calc(100vh-5rem)]">
+      <div className="h-[calc(100vh-10rem)]">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-border/50 rounded-2xl overflow-hidden h-full bg-card shadow-sm">
 
           {/* Left Panel — Conversation List */}
@@ -469,9 +512,14 @@ function TeacherMessages() {
                               'max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
                               isMe
                                 ? 'bg-primary text-primary-foreground rounded-br-sm'
-                                : 'bg-muted text-foreground rounded-bl-sm'
+                                : msg.senderRole === 'ta'
+                                  ? 'bg-violet-100 text-violet-900 rounded-bl-sm'
+                                  : 'bg-muted text-foreground rounded-bl-sm'
                             )}
                           >
+                            {msg.senderRole === 'ta' && msg.senderName && (
+                              <p className="text-[10px] font-bold text-violet-700 mb-1">{msg.senderName}</p>
+                            )}
                             <p>{msg.text}</p>
                             <p className={cn('text-[10px] mt-1 opacity-70', isMe ? 'text-right' : '')}>
                               {formatTime(msg.createdAt)}
@@ -507,7 +555,7 @@ function TeacherMessages() {
           </div>
         </div>
       </div>
-    </>
+    </TeacherLayout>
   );
 }
 

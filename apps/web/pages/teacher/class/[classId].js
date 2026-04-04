@@ -13,9 +13,11 @@ import {
   getDocs, 
   addDoc, 
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
   orderBy,
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 
 import { db, functions } from '@/firebase';
@@ -36,10 +38,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 // Quiz form schema moved inside components for dynamic validation
@@ -73,6 +75,7 @@ function TeacherClassPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [uploadIsSyllabus, setUploadIsSyllabus] = useState(false);
   const fileInputRef = useRef(null);
 
   // Performance State
@@ -106,6 +109,16 @@ function TeacherClassPage() {
   const [uploadAssignmentProgress, setUploadAssignmentProgress] = useState(0);
   const assignmentFileInputRef = useRef(null);
 
+  // Confusion Heatmap State
+  const [heatmapData, setHeatmapData] = useState(null);
+  const [isHeatmapLoading, setIsHeatmapLoading] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+
+  // Archived Students State
+  const [archivedStudents, setArchivedStudents] = useState([]);
+  const [reinviteConfirmId, setReinviteConfirmId] = useState(null);
+  const [deleteStudentConfirmId, setDeleteStudentConfirmId] = useState(null);
+
   // Edit Assignment State
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
@@ -135,12 +148,16 @@ function TeacherClassPage() {
 
   const assignmentFormSchema = z.object({
     title: z.string().min(1, 'Title is required').max(100, 'Title must be under 100 characters'),
-    dueDate: z.string().optional()
+    dueDate: z.string().optional(),
+    questionPoints: z.array(z.object({
+      number: z.string(),
+      points: z.coerce.number().min(0, 'Must be 0 or more'),
+    })).optional(),
   });
 
   const assignmentForm = useForm({
     resolver: zodResolver(assignmentFormSchema),
-    defaultValues: { title: '', dueDate: '' }
+    defaultValues: { title: '', dueDate: '', questionPoints: [] }
   });
 
   const fetchKnowledgeBase = async () => {
@@ -345,7 +362,26 @@ function TeacherClassPage() {
           setIsPerformanceLoading(false);
         }
 
-        // 5. Fetch Knowledge Base
+        // 5. Fetch Archived Students
+        if (fetchedClass.archivedStudents && fetchedClass.archivedStudents.length > 0) {
+          const archivedPromises = fetchedClass.archivedStudents.map(async (uid) => {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', uid));
+              if (userDoc.exists()) {
+                return { uid: userDoc.id, ...userDoc.data() };
+              }
+            } catch (err) {
+              console.error(`Error fetching archived user ${uid}:`, err);
+            }
+            return { uid, displayName: 'Unknown Student', email: 'N/A' };
+          });
+          const archivedObj = await Promise.all(archivedPromises);
+          setArchivedStudents(archivedObj);
+        } else {
+          setArchivedStudents([]);
+        }
+
+        // 6. Fetch Knowledge Base
         fetchKnowledgeBase();
 
         // 6. Fetch Quizzes
@@ -415,7 +451,8 @@ function TeacherClassPage() {
         classId: classId,
         teacherId: user.uid,
         title: uploadTitle.trim(),
-        storageUrl: storagePath, // Using the path as requested, not the downloadURL
+        storageUrl: storagePath,
+        isSyllabus: uploadIsSyllabus,
         uploadedAt: serverTimestamp()
       });
 
@@ -423,6 +460,7 @@ function TeacherClassPage() {
       setUploadTitle('');
       setUploadFile(null);
       setUploadProgress(0);
+      setUploadIsSyllabus(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -533,6 +571,121 @@ function TeacherClassPage() {
     }
   };
 
+  // Announcement State
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [isSendingAnnouncement, setIsSendingAnnouncement] = useState(false);
+
+  const handleSendAnnouncement = async () => {
+    if (!announcementText.trim() || !classData) return;
+    setIsSendingAnnouncement(true);
+    try {
+      const studentIds = classData.studentIds || [];
+      const batch = [];
+      for (const studentId of studentIds) {
+        batch.push(
+          addDoc(collection(db, 'notifications'), {
+            senderId: user.uid,
+            recipientId: studentId,
+            notifType: 'announcement',
+            title: `Announcement: ${classData.name}`,
+            message: announcementText.trim(),
+            href: `/student/class/${classId}`,
+            read: false,
+            createdAt: serverTimestamp(),
+          })
+        );
+      }
+      await Promise.all(batch);
+      setAnnouncementText('');
+      setIsAnnouncementOpen(false);
+    } catch (err) {
+      console.error('Error sending announcement:', err);
+    } finally {
+      setIsSendingAnnouncement(false);
+    }
+  };
+
+  // --- TA Management Handler ---
+  const handleToggleTA = async (studentUid) => {
+    const taIds = classData?.taIds || [];
+    const isTA = taIds.includes(studentUid);
+    const newTaIds = isTA ? taIds.filter(id => id !== studentUid) : [...taIds, studentUid];
+    try {
+      await updateDoc(doc(db, 'classes', classId), { taIds: newTaIds });
+      setClassData(prev => ({ ...prev, taIds: newTaIds }));
+    } catch (err) {
+      console.error('Error toggling TA:', err);
+    }
+  };
+
+  // --- Delete Assignment Handler ---
+  const [deleteAssignmentId, setDeleteAssignmentId] = useState(null);
+
+  const handleDeleteAssignment = async (assignment) => {
+    try {
+      // Delete PDF from storage if exists
+      if (assignment.pdfUrl) {
+        await deleteFile(assignment.pdfUrl).catch(() => {});
+      }
+      // Delete assignment doc
+      await deleteDoc(doc(db, 'assignments', assignment.id));
+      fetchAssignments();
+      setDeleteAssignmentId(null);
+    } catch (err) {
+      console.error('Error deleting assignment:', err);
+    }
+  };
+
+  // --- Confusion Heatmap Handler ---
+  const generateHeatmap = async () => {
+    setIsHeatmapLoading(true);
+    setShowHeatmap(true);
+    try {
+      const fn = httpsCallable(functions, 'confusion_heatmap');
+      const result = await fn({ classId });
+      setHeatmapData(result.data);
+    } catch (err) {
+      console.error('Heatmap generation error:', err);
+      setHeatmapData({
+        analysis: 'Failed to generate analysis. Please try again.',
+        topics: []
+      });
+    } finally {
+      setIsHeatmapLoading(false);
+    }
+  };
+
+  // --- Archived Student Handlers ---
+  const handleReinviteStudent = async (studentUid) => {
+    try {
+      await updateDoc(doc(db, 'classes', classId), {
+        archivedStudents: arrayRemove(studentUid),
+        studentIds: arrayUnion(studentUid),
+      });
+      const student = archivedStudents.find(s => s.uid === studentUid);
+      if (student) {
+        setArchivedStudents(prev => prev.filter(s => s.uid !== studentUid));
+        setEnrolledStudents(prev => [...prev, student]);
+      }
+      setReinviteConfirmId(null);
+    } catch (err) {
+      console.error('Error reinviting student:', err);
+    }
+  };
+
+  const handleDeleteArchivedStudent = async (studentUid) => {
+    try {
+      await updateDoc(doc(db, 'classes', classId), {
+        archivedStudents: arrayRemove(studentUid),
+      });
+      setArchivedStudents(prev => prev.filter(s => s.uid !== studentUid));
+      setDeleteStudentConfirmId(null);
+    } catch (err) {
+      console.error('Error removing archived student:', err);
+    }
+  };
+
   const openEditAssignmentDialog = (e, asgn) => {
     e.stopPropagation();
     setEditingAssignment(asgn);
@@ -544,9 +697,14 @@ function TeacherClassPage() {
       const localDate = new Date(d.getTime() - (offset*60*1000));
       dateStr = localDate.toISOString().split('T')[0];
     }
+    const qPoints = (asgn.rubric?.questions || []).map(q => ({
+      number: q.number || '',
+      points: q.points ?? 1,
+    }));
     assignmentForm.reset({
       title: asgn.title,
-      dueDate: dateStr
+      dueDate: dateStr,
+      questionPoints: qPoints,
     });
     setIsAssignmentDialogOpen(true);
   };
@@ -556,15 +714,27 @@ function TeacherClassPage() {
     try {
       let dd = null;
       if (values.dueDate) {
-        // Assume dueDate input correctly returns YYYY-MM-DD string, create proper date object
         const parts = values.dueDate.split('-');
         dd = new Date(parts[0], parts[1] - 1, parts[2]);
       }
-      
-      await updateDoc(doc(db, 'assignments', editingAssignment.id), {
+
+      const updateData = {
         title: values.title,
         dueDate: dd
-      });
+      };
+
+      // Update rubric question points if provided
+      if (values.questionPoints?.length > 0 && editingAssignment.rubric?.questions) {
+        const updatedQuestions = editingAssignment.rubric.questions.map((q, idx) => {
+          const override = values.questionPoints[idx];
+          return override ? { ...q, points: override.points } : q;
+        });
+        const newTotal = updatedQuestions.reduce((sum, q) => sum + (q.points || 0), 0);
+        updateData.rubric = { ...editingAssignment.rubric, questions: updatedQuestions, totalPoints: newTotal };
+        updateData.totalPoints = newTotal;
+      }
+
+      await updateDoc(doc(db, 'assignments', editingAssignment.id), updateData);
 
       setIsAssignmentDialogOpen(false);
       assignmentForm.reset();
@@ -693,6 +863,45 @@ function TeacherClassPage() {
               <p className="text-muted-foreground mt-1 flex items-center">
                 Class Code: <span className="font-mono ml-2 font-semibold text-foreground px-2 py-0.5 bg-muted rounded-md">{classData.classCode}</span>
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-muted-foreground">Extension Passes per Student:</span>
+                <Input
+                  type="number"
+                  min="0"
+                  max="10"
+                  className="w-16 h-7 text-center text-sm rounded-lg"
+                  value={classData.extensionPassesTotal ?? 0}
+                  onChange={async (e) => {
+                    const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
+                    try {
+                      await updateDoc(doc(db, 'classes', classId), { extensionPassesTotal: val });
+                      setClassData(prev => ({ ...prev, extensionPassesTotal: val }));
+                    } catch (err) {
+                      console.error('Error updating extension passes:', err);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                onClick={() => setIsAnnouncementOpen(true)}
+              >
+                <Megaphone className="h-4 w-4 mr-2" /> <span className="hidden sm:inline">Announce</span>
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/modules`)}>
+                <FileText className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Modules</span>
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/attendance`)}>
+                <CheckCircle className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Attendance</span>
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/office-hours`)}>
+                <Clock className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Office Hours</span>
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/forum`)}>
+                <ClipboardList className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Forum</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -719,32 +928,119 @@ function TeacherClassPage() {
                   </div>
                 ) : (
                   <ul className="space-y-3">
-                    {enrolledStudents.map((student) => (
-                      <li 
-                        key={student.uid} 
-                        className="flex flex-col p-3 bg-muted/40 hover:bg-muted/60 rounded-lg cursor-pointer transition-colors"
-                        onClick={() => router.push(`/teacher/class/${classId}/student/${student.uid}`)}
-                      >
-                        <div className="flex justify-between items-start w-full">
-                          <div className="min-w-0">
-                            <span className="text-sm font-medium text-foreground truncate block">{student.displayName}</span>
-                            <span className="text-xs text-muted-foreground truncate block">{student.email}</span>
+                    {enrolledStudents.map((student) => {
+                      const isTA = (classData?.taIds || []).includes(student.uid);
+                      return (
+                        <li
+                          key={student.uid}
+                          className="flex flex-col p-3 bg-muted/40 hover:bg-muted/60 rounded-lg cursor-pointer transition-colors"
+                          onClick={() => router.push(`/teacher/class/${classId}/student/${student.uid}`)}
+                        >
+                          <div className="flex justify-between items-start w-full">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-foreground truncate">{student.displayName}</span>
+                                {isTA && (
+                                  <Badge className="text-[9px] px-1.5 py-0 bg-violet-100 text-violet-700 border-none shrink-0">TA</Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground truncate block">{student.email}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <div className="flex flex-col items-end text-xs">
+                                <span className="text-muted-foreground flex items-center">
+                                  Grade: <b className="text-foreground ml-1">{student.latestGrade !== null ? `${student.latestGrade}%` : 'N/A'}</b>
+                                </span>
+                                <span className="text-muted-foreground flex items-center">
+                                  Quiz: <b className="text-foreground ml-1">{student.latestQuiz !== null ? `${student.latestQuiz}%` : 'N/A'}</b>
+                                </span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-7 text-[10px] rounded-md px-2 ${isTA ? 'text-violet-700 bg-violet-50 hover:bg-violet-100' : 'text-muted-foreground hover:text-violet-700 hover:bg-violet-50'}`}
+                                onClick={(e) => { e.stopPropagation(); handleToggleTA(student.uid); }}
+                              >
+                                {isTA ? 'Remove TA' : 'Make TA'}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex flex-col items-end text-xs shrink-0 ml-2">
-                            <span className="text-muted-foreground flex items-center">
-                              Grade: <b className="text-foreground ml-1">{student.latestGrade !== null ? `${student.latestGrade}%` : 'N/A'}</b>
-                            </span>
-                            <span className="text-muted-foreground flex items-center">
-                              Quiz: <b className="text-foreground ml-1">{student.latestQuiz !== null ? `${student.latestQuiz}%` : 'N/A'}</b>
-                            </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Archived Students */}
+            {archivedStudents.length > 0 && (
+              <Card className="border-amber-200/60 bg-amber-50/30 dark:border-amber-800/40 dark:bg-amber-950/10">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center text-sm font-semibold text-amber-700 dark:text-amber-400">
+                    <Users className="w-4 h-4 mr-2" />
+                    Archived Students
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {archivedStudents.length} student{archivedStudents.length !== 1 ? 's' : ''} left the class. Reinvite or remove them.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {archivedStudents.map((student) => (
+                      <li key={student.uid} className="p-3 bg-background/80 rounded-lg border border-border/50">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{student.displayName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{student.email}</p>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            {reinviteConfirmId === student.uid ? (
+                              <div className="flex items-center gap-1.5">
+                                <Button size="sm" variant="default" className="h-7 text-xs rounded-lg px-2.5" onClick={() => handleReinviteStudent(student.uid)}>
+                                  Confirm
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg px-2" onClick={() => setReinviteConfirmId(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : deleteStudentConfirmId === student.uid ? (
+                              <div className="flex items-center gap-1.5">
+                                <Button size="sm" variant="destructive" className="h-7 text-xs rounded-lg px-2.5" onClick={() => handleDeleteArchivedStudent(student.uid)}>
+                                  Delete
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg px-2" onClick={() => setDeleteStudentConfirmId(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs rounded-lg px-2.5 text-primary border-primary/30 hover:bg-primary/10"
+                                  onClick={() => { setReinviteConfirmId(student.uid); setDeleteStudentConfirmId(null); }}
+                                >
+                                  Reinvite
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs rounded-lg px-2 text-destructive hover:bg-destructive/10"
+                                  onClick={() => { setDeleteStudentConfirmId(student.uid); setReinviteConfirmId(null); }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </li>
                     ))}
                   </ul>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Class Performance Metrics */}
             <Card className="border-muted/60">
@@ -812,10 +1108,108 @@ function TeacherClassPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Confusion Heatmap Button */}
+                    <Button
+                      onClick={generateHeatmap}
+                      disabled={isHeatmapLoading}
+                      className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold shadow-md"
+                    >
+                      {isHeatmapLoading ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</>
+                      ) : (
+                        <><Flame className="w-4 h-4 mr-2" /> Confusion Heatmap</>
+                      )}
+                    </Button>
                   </>
                 )}
               </CardContent>
             </Card>
+
+            {/* Confusion Heatmap Dialog */}
+            <Dialog open={showHeatmap} onOpenChange={setShowHeatmap}>
+              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center text-xl">
+                    <Flame className="w-5 h-5 mr-2 text-amber-500" />
+                    Confusion Heatmap
+                  </DialogTitle>
+                  <DialogDescription>
+                    AI analysis of concepts your class is struggling with — use this before a test or midterm to identify areas to reteach.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-6 pt-2">
+                  {isHeatmapLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3">
+                      <Loader2 className="w-10 h-10 animate-spin text-amber-500" />
+                      <p className="text-sm text-muted-foreground">Analyzing quiz results and assignment grades...</p>
+                    </div>
+                  ) : heatmapData ? (
+                    <>
+                      {/* Analysis Summary */}
+                      <div className="bg-muted/30 border rounded-xl p-5 text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+                        {heatmapData.analysis}
+                      </div>
+
+                      {/* Topic Cards */}
+                      {heatmapData.topics && heatmapData.topics.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Struggling Concepts</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {heatmapData.topics.map((topic, idx) => {
+                              const severityColors = {
+                                high: 'border-red-300 bg-red-50/50 dark:border-red-800/50 dark:bg-red-950/20',
+                                medium: 'border-amber-300 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-950/20',
+                                low: 'border-blue-300 bg-blue-50/50 dark:border-blue-800/50 dark:bg-blue-950/20',
+                              };
+                              const severityBadge = {
+                                high: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                                medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                                low: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                              };
+                              const SIcon = topic.severity === 'high' ? AlertTriangle : TrendingDown;
+
+                              return (
+                                <div key={idx} className={`p-4 rounded-xl border ${severityColors[topic.severity] || severityColors.medium}`}>
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="flex items-start gap-2.5 min-w-0">
+                                      <SIcon className="h-4 w-4 shrink-0 mt-0.5 opacity-70" />
+                                      <span className="text-sm font-semibold leading-tight">{topic.topic}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${severityBadge[topic.severity] || severityBadge.medium}`}>
+                                        {topic.severity}
+                                      </span>
+                                      {topic.count > 0 && (
+                                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap">{topic.count} flags</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground leading-relaxed pl-6">{topic.description}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Regenerate button */}
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={generateHeatmap}
+                          disabled={isHeatmapLoading}
+                        >
+                          <Flame className="w-4 h-4 mr-2" /> Regenerate Analysis
+                        </Button>
+                      </DialogFooter>
+                    </>
+                  ) : null}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {/* Main Content Area */}
@@ -860,7 +1254,19 @@ function TeacherClassPage() {
                       />
                     </div>
                   </div>
-                  
+
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="syllabus-toggle"
+                      checked={uploadIsSyllabus}
+                      onCheckedChange={setUploadIsSyllabus}
+                      disabled={isUploading}
+                    />
+                    <Label htmlFor="syllabus-toggle" className="text-sm font-medium cursor-pointer">
+                      This is the class syllabus
+                    </Label>
+                  </div>
+
                   {uploadError && (
                     <Alert variant="destructive" className="py-2 px-3">
                       <AlertDescription className="text-xs">{uploadError}</AlertDescription>
@@ -916,7 +1322,12 @@ function TeacherClassPage() {
                               <FileText className="w-4 h-4 text-primary" />
                             </div>
                             <div className="truncate">
-                              <p className="text-sm font-medium text-foreground truncate">{doc.title}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium text-foreground truncate">{doc.title}</p>
+                                {doc.isSyllabus && (
+                                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-700 border-none shrink-0">Syllabus</Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">
                                 {doc.uploadedAt ? new Date(doc.uploadedAt.toMillis()).toLocaleDateString() : 'Just now'}
                               </p>
@@ -1196,6 +1607,17 @@ function TeacherClassPage() {
                                      <Pencil className="mr-2 h-4 w-4" />
                                      Edit Config
                                    </DropdownMenuItem>
+                                   {deleteAssignmentId === assignment.id ? (
+                                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteAssignment(assignment); }}>
+                                       <Trash2 className="mr-2 h-4 w-4" />
+                                       Confirm Delete
+                                     </DropdownMenuItem>
+                                   ) : (
+                                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteAssignmentId(assignment.id); }}>
+                                       <Trash2 className="mr-2 h-4 w-4" />
+                                       Delete Assignment
+                                     </DropdownMenuItem>
+                                   )}
                                  </DropdownMenuContent>
                                </DropdownMenu>
                              </TableCell>
@@ -1413,7 +1835,7 @@ function TeacherClassPage() {
       </Dialog>
       {/* Assignment Edit Dialog */}
       <Dialog open={isAssignmentDialogOpen} onOpenChange={setIsAssignmentDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Assignment</DialogTitle>
             <DialogDescription>
@@ -1453,6 +1875,47 @@ function TeacherClassPage() {
                     </FormItem>
                   )}
                 />
+
+                {/* Points per Question (optional) */}
+                {editingAssignment?.rubric?.questions?.length > 0 && (
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">
+                      Points per Question <span className="text-muted-foreground font-normal">(optional)</span>
+                    </Label>
+                    <div className="bg-muted/30 border rounded-lg p-3 space-y-2 max-h-52 overflow-y-auto">
+                      {assignmentForm.watch('questionPoints')?.map((qp, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <span className="text-xs font-mono font-semibold text-muted-foreground w-12 shrink-0">
+                            {qp.number || `Q${idx + 1}`}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate flex-1">
+                            {editingAssignment.rubric.questions[idx]?.description?.slice(0, 50) || ''}
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className="w-20 h-8 text-sm text-center"
+                            value={assignmentForm.watch(`questionPoints.${idx}.points`)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              assignmentForm.setValue(`questionPoints.${idx}.points`, val);
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground shrink-0">pts</span>
+                        </div>
+                      ))}
+                      {assignmentForm.watch('questionPoints')?.length > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t mt-2">
+                          <span className="text-xs font-semibold text-muted-foreground">Total</span>
+                          <span className="text-sm font-bold">
+                            {assignmentForm.watch('questionPoints')?.reduce((sum, q) => sum + (q.points || 0), 0)} pts
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <DialogFooter>
@@ -1477,6 +1940,46 @@ function TeacherClassPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Announcement Dialog */}
+      <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Megaphone className="h-5 w-5 text-amber-500" />
+              Send Announcement
+            </DialogTitle>
+            <DialogDescription>
+              This message will be sent as a notification to all {classData?.studentIds?.length || 0} students in {classData?.name || 'this class'}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Textarea
+              placeholder="Type your announcement here..."
+              value={announcementText}
+              onChange={(e) => setAnnouncementText(e.target.value)}
+              className="min-h-[120px] rounded-xl resize-none"
+              maxLength={500}
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{classData?.studentIds?.length || 0} student{(classData?.studentIds?.length || 0) !== 1 ? 's' : ''} will be notified</span>
+              <span>{announcementText.length}/500</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAnnouncementOpen(false)} disabled={isSendingAnnouncement} className="rounded-xl">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendAnnouncement}
+              disabled={isSendingAnnouncement || !announcementText.trim()}
+              className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+            >
+              {isSendingAnnouncement ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending...</> : <><Megaphone className="h-4 w-4 mr-2" /> Send to All</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

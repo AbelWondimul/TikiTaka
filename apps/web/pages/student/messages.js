@@ -135,10 +135,12 @@ function StudentMessages() {
       }, { merge: true });
 
       // Add message to subcollection
+      const isTAForClass = (selectedClass.taIds || []).includes(user.uid);
       await addDoc(collection(db, 'conversations', convId, 'messages'), {
         text: newMessage.trim(),
         senderId: user.uid,
-        senderRole: 'student',
+        senderRole: isTAForClass ? 'ta' : 'student',
+        senderName: isTAForClass ? `${user.displayName || user.email} (TA)` : undefined,
         createdAt: serverTimestamp(),
       });
 
@@ -258,9 +260,14 @@ function StudentMessages() {
                           'max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
                           isMe
                             ? 'bg-primary text-primary-foreground rounded-br-sm'
-                            : 'bg-muted text-foreground rounded-bl-sm'
+                            : msg.senderRole === 'ta'
+                              ? 'bg-violet-100 text-violet-900 rounded-bl-sm'
+                              : 'bg-muted text-foreground rounded-bl-sm'
                         )}
                       >
+                        {msg.senderRole === 'ta' && msg.senderName && (
+                          <p className="text-[10px] font-bold text-violet-700 mb-1">{msg.senderName}</p>
+                        )}
                         <p>{msg.text}</p>
                         <p className={cn('text-[10px] mt-1 opacity-70', isMe ? 'text-right' : '')}>
                           {formatTime(msg.createdAt)}

@@ -45,6 +45,13 @@ service cloud.firestore {
         request.auth.uid == get(/databases/$(database)/documents/classes/$(classId)).data.teacherId;
     }
 
+    // Returns true if the calling user is a TA for the given classId
+    function isTAofClass(classId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/classes/$(classId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/classes/$(classId)).data.get('taIds', []);
+    }
+
     // ─────────────────────────────────────────
     // Users
     // ─────────────────────────────────────────
@@ -76,13 +83,29 @@ service cloud.firestore {
       allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
 
       // Teacher updates/deletes their own class freely
-      // Students may ONLY append their own uid to studentIds — no other fields may change
+      // Students may modify studentIds and archivedStudents for join/leave — no other fields
+      // Join: append their own uid to studentIds
+      // Leave: remove themselves from studentIds and add themselves to archivedStudents
       allow update: if (isTeacher() && resource.data.teacherId == request.auth.uid) ||
                        (isStudent() &&
-                        request.resource.data.diff(resource.data).affectedKeys() == ['studentIds'].toSet() &&
-                        request.resource.data.studentIds.hasAll(resource.data.studentIds) &&
-                        request.resource.data.studentIds.size() == resource.data.studentIds.size() + 1 &&
-                        request.resource.data.studentIds.hasAll([request.auth.uid]));
+                        (
+                          // Join — only studentIds changes, uid appended
+                          (request.resource.data.diff(resource.data).affectedKeys() == ['studentIds'].toSet() &&
+                           request.resource.data.studentIds.hasAll(resource.data.studentIds) &&
+                           request.resource.data.studentIds.size() == resource.data.studentIds.size() + 1 &&
+                           request.resource.data.studentIds.hasAll([request.auth.uid]))
+                          ||
+                          // Leave — studentIds shrinks by 1, archivedStudents grows by 1 (their uid)
+                          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentIds', 'archivedStudents']) &&
+                           resource.data.studentIds.hasAll([request.auth.uid]) &&
+                           !request.resource.data.studentIds.hasAll([request.auth.uid]) &&
+                           request.resource.data.studentIds.size() == resource.data.studentIds.size() - 1 &&
+                           resource.data.studentIds.hasAll(request.resource.data.studentIds))
+                          ||
+                          // Extension request — only extensionDueDates and extensionPassesUsed change
+                          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['extensionDueDates', 'extensionPassesUsed']) &&
+                           resource.data.studentIds.hasAll([request.auth.uid]))
+                        ));
 
       allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
 
@@ -118,31 +141,37 @@ service cloud.firestore {
 
       // Re-grade / Appeal flow — tightly constrained per actor
       allow update: if isAuthenticated() && (
-        // Student moves status TO 'disputed' on their own job — only status field changes
+        // Student can dispute with a reason — status + appealReason + appealedAt
         (isStudent() &&
          resource.data.studentId == request.auth.uid &&
-         request.resource.data.diff(resource.data).affectedKeys() == ['status'].toSet() &&
-         request.resource.data.status == 'disputed')
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'appealReason', 'appealedAt']) &&
+         request.resource.data.status == 'disputed' &&
+         request.resource.data.appealReason is string &&
+         request.resource.data.appealReason.size() <= 1000)
         ||
-        // Teacher overrides grade details (gradedQuestions, score) or triggers re-grade (status)
+        // Teacher overrides grade details or responds to appeals
         (isTeacher() &&
          resource.data.teacherId == request.auth.uid &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'gradedQuestions', 'score', 'status']))
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'gradedQuestions', 'score', 'appealResponse', 'appealRespondedAt']))
+        ||
+        // TA can edit grades (score, gradedQuestions, status) for classes they TA
+        (resource.data.classId is string && resource.data.classId != '' &&
+         isTAofClass(resource.data.classId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'gradedQuestions', 'score']))
       );
 
       // Grading jobs are audit records — no one deletes them
       allow delete: if false;
 
-      // Student reads their own jobs; teacher reads any job belonging to their class
-      // To support client-side onSnapshot listeners set right before document creation commits in the backend,
-      // allow read if the space is empty (resource == null) safely.
+      // Student reads their own jobs; teacher reads jobs in their class; TA reads jobs in their TA class
       allow read: if isAuthenticated() && (
         resource == null ||
         resource.data.studentId == request.auth.uid ||
         (isTeacher() && (
           resource.data.teacherId == request.auth.uid ||
           (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
-        ))
+        )) ||
+        (resource.data.classId is string && resource.data.classId != '' && isTAofClass(resource.data.classId))
       );
     }
 
@@ -243,42 +272,206 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /conversations/{conversationId} {
-      // Allow read if user is the student or the teacher in the conversation
+      // Allow read if user is participant or TA of the class
       allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.studentId || 
-        request.auth.uid == resource.data.teacherId
+        request.auth.uid == resource.data.studentId ||
+        request.auth.uid == resource.data.teacherId ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
 
-      // Allow create if student is enrolled in the class or teacher owns the class
+      // Allow create if student enrolled, teacher owns class, or TA of class
       allow create: if isAuthenticated() && (
         (isStudent() && request.auth.uid == request.resource.data.studentId && isEnrolledInClass(request.resource.data.classId)) ||
-        (isTeacher() && request.auth.uid == request.resource.data.teacherId && isTeacherOfClass(request.resource.data.classId))
+        (isTeacher() && request.auth.uid == request.resource.data.teacherId && isTeacherOfClass(request.resource.data.classId)) ||
+        (request.resource.data.classId is string && isTAofClass(request.resource.data.classId))
       );
 
-      // Allow update if user is participant
+      // Allow update if user is participant or TA
       allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.studentId || 
-        request.auth.uid == resource.data.teacherId
+        request.auth.uid == resource.data.studentId ||
+        request.auth.uid == resource.data.teacherId ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
 
       match /messages/{messageId} {
-        // Read messages if parent conversation exists and user is a participant
+        // Read/create messages if participant or TA
         allow read: if isAuthenticated() &&
           exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
           (
             get(/databases/$(database)/documents/conversations/$(conversationId)).data.studentId == request.auth.uid ||
-            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid ||
+            (get(/databases/$(database)/documents/conversations/$(conversationId)).data.classId is string &&
+             isTAofClass(get(/databases/$(database)/documents/conversations/$(conversationId)).data.classId))
           );
 
-        // Create message if user is a participant in the conversation
         allow create: if isAuthenticated() &&
           request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 5000 &&
           exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
           (
             get(/databases/$(database)/documents/conversations/$(conversationId)).data.studentId == request.auth.uid ||
-            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.teacherId == request.auth.uid ||
+            (get(/databases/$(database)/documents/conversations/$(conversationId)).data.classId is string &&
+             isTAofClass(get(/databases/$(database)/documents/conversations/$(conversationId)).data.classId))
           );
       }
+    }
+
+    // ─────────────────────────────────────────
+    // Modules (weekly content containers)
+    // ─────────────────────────────────────────
+
+    match /modules/{moduleId} {
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // Module Resources (items within modules)
+    // ─────────────────────────────────────────
+
+    match /moduleResources/{resourceId} {
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // Module Progress (tracks student resource views)
+    // ─────────────────────────────────────────
+
+    match /moduleProgress/{progressId} {
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.studentId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.studentId == request.auth.uid ||
+        (isTeacher() && resource.data.classId is string && isTeacherOfClass(resource.data.classId))
+      );
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Forum Posts (anonymous student Q&A)
+    // ─────────────────────────────────────────
+
+    match /forumPosts/{postId} {
+      // Students enrolled in the class can create posts with content length validation
+      allow create: if isStudent() &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.classId is string &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() > 0 &&
+        request.resource.data.content.size() <= 1000 &&
+        isEnrolledInClass(request.resource.data.classId);
+
+      // Students can update upvotedBy (upvote) or replies (add reply)
+      // Teachers and TAs can update (moderation + replies)
+      allow update: if isAuthenticated() && (
+        // Student: upvote or reply
+        (isStudent() &&
+         isEnrolledInClass(resource.data.classId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotedBy', 'replies']))
+        ||
+        // Teacher moderation + replies
+        (isTeacher() && isTeacherOfClass(resource.data.classId))
+        ||
+        // TA can reply (only replies field)
+        (isTAofClass(resource.data.classId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies']))
+      );
+
+      // Teacher can delete posts from their class
+      allow delete: if isTeacher() && isTeacherOfClass(resource.data.classId);
+
+      // Students enrolled, teachers, and TAs can read
+      // IMPORTANT: authorId is in the doc but teacher/TA UI must NOT display it
+      allow read: if isAuthenticated() && (
+        (isStudent() && isEnrolledInClass(resource.data.classId)) ||
+        (isTeacher() && isTeacherOfClass(resource.data.classId)) ||
+        isTAofClass(resource.data.classId)
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // Attendance
+    // ─────────────────────────────────────────
+
+    match /attendance/{recordId} {
+      allow create, update: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.teacherId == request.auth.uid ||
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+      );
+      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────
+    // Office Hours
+    // ─────────────────────────────────────────
+
+    match /officeHours/{slotId} {
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.teacherId == request.auth.uid ||
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+      );
+    }
+
+    match /officeHourBookings/{bookingId} {
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.teacherId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.teacherId == request.auth.uid
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // Schedules
+    // ─────────────────────────────────────────
+
+    match /schedules/{blockId} {
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+
+      // Teachers read their own; students read if enrolled in the class
+      allow read: if isAuthenticated() && (
+        resource.data.teacherId == request.auth.uid ||
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // Notifications
+    // ─────────────────────────────────────────
+
+    match /notifications/{notifId} {
+      // Authenticated users can create notifications with validation
+      allow create: if isAuthenticated() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.recipientId is string;
+
+      // Only the recipient can read or update (mark as read) their notifications
+      allow read: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
+
+      // Only the recipient can delete their notifications
+      allow delete: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
     }
 
     // ─────────────────────────────────────────

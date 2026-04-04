@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Upload } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Upload, MessageSquare } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { serverTimestamp } from 'firebase/firestore';
 
 function SubmissionDetail() {
   const router = useRouter();
@@ -28,6 +30,23 @@ function SubmissionDetail() {
   }
 
   const [job, setJob] = useState(null);
+  const [appealReason, setAppealReason] = useState('');
+  const [showAppealForm, setShowAppealForm] = useState(false);
+  const [isAppealing, setIsAppealing] = useState(false);
+
+  const handleAppeal = async () => {
+    if (!appealReason.trim() || !job) return;
+    setIsAppealing(true);
+    try {
+      await updateDoc(doc(db, 'gradingJobs', jobId), {
+        status: 'disputed',
+        appealReason: appealReason.trim(),
+        appealedAt: serverTimestamp(),
+      });
+      setShowAppealForm(false);
+    } catch (err) { console.error('Appeal error:', err); }
+    finally { setIsAppealing(false); }
+  };
   const [assignment, setAssignment] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadUrl, setDownloadUrl] = useState(null);
@@ -312,6 +331,45 @@ function SubmissionDetail() {
                   ))}
                 </div>
               </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Grade Appeal Section */}
+        {job && job.status === 'complete' && (
+          <div className="max-w-3xl mx-auto mt-6 px-4 sm:px-0">
+            {job.appealResponse ? (
+              <Card className="rounded-2xl border-blue-200/50 bg-blue-50/30 p-4 space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Teacher Response to Your Appeal</p>
+                <p className="text-sm text-foreground">{job.appealResponse}</p>
+              </Card>
+            ) : showAppealForm ? (
+              <Card className="rounded-2xl p-4 space-y-3">
+                <p className="text-sm font-bold">Appeal This Grade</p>
+                <Textarea value={appealReason} onChange={e => setAppealReason(e.target.value)} placeholder="Explain why you believe this grade should be reconsidered..." className="rounded-xl min-h-[80px] resize-none" maxLength={1000} />
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">{appealReason.length}/1000</span>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowAppealForm(false)}>Cancel</Button>
+                    <Button size="sm" onClick={handleAppeal} disabled={isAppealing || !appealReason.trim()} className="rounded-xl">
+                      {isAppealing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit Appeal'}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <Button variant="outline" className="w-full rounded-xl" onClick={() => setShowAppealForm(true)}>
+                <MessageSquare className="h-4 w-4 mr-2" /> Appeal This Grade
+              </Button>
+            )}
+          </div>
+        )}
+        {job && job.status === 'disputed' && (
+          <div className="max-w-3xl mx-auto mt-6 px-4 sm:px-0">
+            <Card className="rounded-2xl border-amber-200/50 bg-amber-50/30 p-4 space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-600">Appeal Submitted</p>
+              <p className="text-sm text-foreground">{job.appealReason}</p>
+              <p className="text-[10px] text-muted-foreground">Waiting for teacher review...</p>
             </Card>
           </div>
         )}

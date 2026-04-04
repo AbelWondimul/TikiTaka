@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import Logo from '@/components/layout/Logo';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,41 @@ export default function Login() {
       router.replace(`/${role}/dashboard`);
     }
   }, [user, role, authLoading, router]);
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const googleUser = result.user;
+
+      // Check if user already exists in Firestore
+      const userDoc = await getDoc(doc(db, 'users', googleUser.uid));
+      if (!userDoc.exists()) {
+        // New user — write registration payload with selected role
+        await setDoc(doc(db, 'registration_payloads', googleUser.uid), {
+          displayName: googleUser.displayName || googleUser.email,
+          role: selectedRole,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Wait for onUserCreate to process
+        setTimeout(() => {
+          googleUser.getIdToken(true).then(() => {
+            router.reload();
+          });
+        }, 6000);
+      }
+      // Existing user — useEffect will redirect
+    } catch (err) {
+      console.error(err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError(err.message || 'Google sign-in failed. Please try again.');
+      }
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -246,6 +281,36 @@ export default function Login() {
                     {isLogin ? 'Sign In' : 'Create Account'}
                   </button>
                 </div>
+
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[#e0e3e2] dark:border-slate-700"></div>
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-white dark:bg-slate-900 px-4 text-[10px] font-bold uppercase tracking-widest text-[#72787f] dark:text-slate-500">or</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-[#e0e3e2] dark:border-slate-700 py-3.5 px-6 rounded-lg font-semibold text-sm text-[#181c1c] dark:text-white hover:bg-[#f1f4f3] dark:hover:bg-slate-700 active:scale-95 transition-all duration-200"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Continue with Google
+                </button>
+
+                {!isLogin && (
+                  <p className="text-center text-[10px] text-[#72787f] dark:text-slate-500 mt-2">
+                    Google sign-up will use the role selected above ({selectedRole}).
+                  </p>
+                )}
 
                 <p className="text-center text-[10px] text-[#72787f] dark:text-slate-500 px-4 font-['Inter'] leading-relaxed">
                   By signing {isLogin ? 'in' : 'up'}, you agree to our Terms of Service and Privacy Policy. Data processed by TikiTaka AI.

@@ -4,8 +4,9 @@ import { auth } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { User, LogOut, Bell, Settings, CreditCard } from 'lucide-react';
+import { User, LogOut, Settings } from 'lucide-react';
 import Logo from './Logo';
+import NotificationDropdown from './NotificationDropdown';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -45,20 +46,17 @@ export default function Header() {
             <Link href="/teacher/dashboard" className="text-[#006b5b] dark:text-[#88f3da] font-bold border-b-2 border-[#006b5b] dark:border-[#88f3da] pb-1">
               Dashboard
             </Link>
-            <Link href="#" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
+            <Link href="/teacher/schedule" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
               Schedule
             </Link>
-            <Link href="#" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
+            <Link href="/teacher/resources" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
               Resources
             </Link>
           </nav>
         )}
 
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-primary rounded-full border-2 border-background" />
-          </Button>
+          <NotificationDropdown />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

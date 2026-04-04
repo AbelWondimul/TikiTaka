@@ -788,3 +788,254 @@ Return ONLY a JSON block with this exact structure (no markdown fences, just sta
     _increment_usage()
     return rubric
 
+
+@https_fn.on_call(
+    timeout_sec=60,
+    memory=options.MemoryOption.MB_512,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
+)
+def tika_chat(req: https_fn.CallableRequest):
+    """
+    Tika chatbot — answers student questions grounded ONLY in their assignments,
+    due dates, grades, and teacher-uploaded knowledge base materials.
+    Input (req.data): { question: str, context: str }
+    Returns: { answer: str }
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Authentication required."
+        )
+
+    question = (req.data or {}).get("question", "").strip()[:1000]
+    context = (req.data or {}).get("context", "").strip()[:15000]
+
+    if not question:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Question is required."
+        )
+
+    # Fetch knowledge base text for student's enrolled classes
+    student_uid = req.auth.uid
+    db = _get_db()
+
+    # Get classes the student is enrolled in
+    classes_query = db.collection('classes').where('studentIds', 'array_contains', student_uid).stream()
+    class_ids = []
+    for c in classes_query:
+        class_ids.append(c.id)
+
+    kb_text = ""
+    if class_ids:
+        import fitz
+        for cid in class_ids[:10]:  # cap at 10 classes
+            kb_query = db.collection('knowledgeBase').where('classId', '==', cid).stream()
+            for kb_doc in kb_query:
+                kb_data = kb_doc.to_dict()
+                kb_path = kb_data.get('storageUrl')
+                if not kb_path:
+                    continue
+                try:
+                    kb_blob = _get_bucket().blob(kb_path)
+                    if kb_blob.exists():
+                        kb_bytes = kb_blob.download_as_bytes()
+                        kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
+                        for page in kb_pdf:
+                            kb_text += page.get_text() + "\n"
+                        kb_pdf.close()
+                except Exception as e:
+                    print(f"Failed to parse KB doc: {e}")
+
+    # Cap KB text to avoid token overflows
+    if len(kb_text) > 30000:
+        kb_text = kb_text[:30000] + "\n[...truncated]"
+
+    genai = _init_genai()
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    system_prompt = f"""You are Tika, a helpful and friendly student assistant for the TikiTaka learning platform.
+
+STRICT RULES:
+1. You may ONLY answer questions using the CONTEXT provided below. This includes the student's enrolled classes, assignments, due dates, grades, and teacher-uploaded knowledge base materials.
+2. If the answer is NOT in the context, say: "I don't have enough information to answer that. Please ask your teacher for help!"
+3. NEVER make up facts, grades, due dates, or assignment details.
+4. NEVER generate study content or answers to homework questions — only help the student understand what they need to do and when.
+5. Be concise, encouraging, and helpful. Use a warm, supportive tone.
+6. When listing assignments or due dates, be specific and organized.
+7. If asked about grading, only reference actual scores and feedback from the context.
+8. WHAT-IF GRADE QUESTIONS: When the student asks "What if I get X on [assignment]?" or similar hypothetical grade questions:
+   - Use the GRADE CALCULATION DATA and WHAT-IF FORMULA from the context
+   - Calculate: New % = (current earned + hypothetical score) / (current possible + assignment total points) * 100
+   - Show their current grade %, the projected grade %, and the difference
+   - Be encouraging regardless of the result
+   - You can handle multiple what-if scenarios in one question
+   - If the student asks what grade they NEED to reach a target %, work backwards: needed score = (target% * new total possible / 100) - current earned
+
+STUDENT CONTEXT (assignments, classes, grades, due dates):
+{context}
+
+TEACHER KNOWLEDGE BASE MATERIALS:
+{kb_text if kb_text else "No knowledge base materials uploaded by teachers yet."}
+"""
+
+    try:
+        response = model.generate_content([
+            {"role": "user", "parts": [system_prompt]},
+            {"role": "model", "parts": ["Hi! I'm Tika, your learning assistant. I can help you with your assignments, due dates, and class info. What would you like to know?"]},
+            {"role": "user", "parts": [question]},
+        ])
+        answer = response.text.strip()
+    except Exception as e:
+        print(f"Tika chat error: {e}")
+        answer = "Sorry, I'm having trouble right now. Please try again in a moment!"
+
+    return {"answer": answer}
+
+
+@https_fn.on_call(
+    timeout_sec=120,
+    memory=options.MemoryOption.GB_1,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
+)
+def confusion_heatmap(req: https_fn.CallableRequest):
+    """
+    Generates a confusion heatmap analysis for a class.
+    Analyzes quiz topic gaps and assignment grading feedback to identify
+    concepts the class is struggling with.
+    Input (req.data): { classId: str }
+    Returns: { analysis: str, topics: [{ topic, severity, count, description }] }
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Authentication required."
+        )
+
+    class_id = (req.data or {}).get("classId", "").strip()
+    if not class_id:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="classId is required."
+        )
+
+    db = _get_db()
+
+    # Verify teacher owns the class
+    class_doc = db.collection('classes').document(class_id).get()
+    if not class_doc.exists or class_doc.to_dict().get('teacherId') != req.auth.uid:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            message="You do not own this class."
+        )
+
+    class_data = class_doc.to_dict()
+    student_count = len(class_data.get('studentIds', []))
+
+    # 1. Gather quiz topic gaps
+    quiz_data = []
+    quiz_query = db.collection('quizAttempts').where('classId', '==', class_id).stream()
+    for attempt_doc in quiz_query:
+        attempt = attempt_doc.to_dict()
+        quiz_data.append({
+            'score': attempt.get('score'),
+            'topicGaps': attempt.get('topicGaps', []),
+            'questions': [
+                {'topic': q.get('topic', ''), 'correct': q.get('correct', True)}
+                for q in attempt.get('questions', [])
+            ]
+        })
+
+    # 2. Gather assignment grading feedback
+    assignment_data = []
+    jobs_query = db.collection('gradingJobs').where('classId', '==', class_id).where('teacherId', '==', req.auth.uid).stream()
+    for job_doc in jobs_query:
+        job = job_doc.to_dict()
+        if job.get('status') == 'complete' and job.get('gradedQuestions'):
+            assignment_data.append({
+                'title': job.get('assignmentTitle', 'Assignment'),
+                'score': job.get('score'),
+                'totalPoints': job.get('totalPoints'),
+                'questions': [
+                    {
+                        'number': q.get('questionNumber', ''),
+                        'status': q.get('status', ''),
+                        'pointsEarned': q.get('pointsEarned', 0),
+                        'pointsPossible': q.get('pointsPossible', 0),
+                        'feedback': q.get('feedback', '')
+                    }
+                    for q in job.get('gradedQuestions', [])
+                ]
+            })
+
+    # 3. Get assignment rubric info
+    rubric_data = []
+    assign_query = db.collection('assignments').where('classId', '==', class_id).stream()
+    for assign_doc in assign_query:
+        assign = assign_doc.to_dict()
+        if assign.get('rubric') and assign['rubric'].get('questions'):
+            rubric_data.append({
+                'title': assign.get('title', ''),
+                'topic': assign.get('topic', assign['rubric'].get('topic', '')),
+                'questions': [
+                    {'number': q.get('number', ''), 'description': q.get('description', '')}
+                    for q in assign['rubric']['questions']
+                ]
+            })
+
+    if not quiz_data and not assignment_data:
+        return {
+            "analysis": "Not enough data yet. Students need to complete quizzes or assignments before a confusion analysis can be generated.",
+            "topics": []
+        }
+
+    # 4. Call Gemini for analysis
+    genai = _init_genai()
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    prompt = f"""You are an expert educational analyst. A teacher wants to understand what concepts their class of {student_count} students is struggling with BEFORE an upcoming test or midterm.
+
+Analyze the following data and produce a structured confusion report.
+
+QUIZ ATTEMPT DATA ({len(quiz_data)} attempts):
+{json.dumps(quiz_data[:50], default=str)}
+
+ASSIGNMENT GRADING DATA ({len(assignment_data)} graded submissions):
+{json.dumps(assignment_data[:50], default=str)}
+
+ASSIGNMENT RUBRIC CONTEXT:
+{json.dumps(rubric_data[:20], default=str)}
+
+Based on the data above, produce a JSON response with this exact structure (no markdown fences):
+{{
+  "analysis": "A 2-3 paragraph executive summary written directly to the teacher. Start with the most critical areas of confusion. Be specific about which concepts students are getting wrong and why. Give actionable reteaching suggestions. Use a professional but supportive tone.",
+  "topics": [
+    {{
+      "topic": "Name of the concept/topic",
+      "severity": "high" | "medium" | "low",
+      "count": <number of students/attempts affected>,
+      "description": "1-2 sentence explanation of what students are getting wrong and a suggestion for how to reteach it"
+    }}
+  ]
+}}
+
+Sort topics by severity (high first), then by count descending. Include up to 10 topics maximum.
+Return ONLY the JSON object, no other text.
+"""
+
+    try:
+        response = model.generate_content(prompt)
+        raw = response.text.strip()
+        if "```json" in raw:
+            raw = raw.split("```json")[-1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].strip()
+        parsed = json.loads(raw)
+        return parsed
+    except Exception as e:
+        print(f"Confusion heatmap generation error: {e}")
+        return {
+            "analysis": "Unable to generate analysis at this time. Please try again later.",
+            "topics": []
+        }
+

@@ -2,62 +2,66 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isTeacher() {
       return isAuthenticated() && (
-        request.auth.token.role == 'teacher' || 
+        request.auth.token.role == 'teacher' ||
         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'teacher'
       );
     }
 
+    function isEnrolledInClass(classId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/classes/$(classId)) &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/classes/$(classId)).data.studentIds;
+    }
 
     match /raw/{uid}/{jobId} {
       allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 20 * 1024 * 1024;
       allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
     match /results/{uid}/{jobId} {
-      allow write: if false; 
+      allow write: if false;
       allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
 
-    // Legacy fallback for documents uploaded before namespacing
+    // Legacy fallback — restrict to owner or teacher
     match /raw/{jobId} {
-      allow write: if false; 
-      allow read: if isAuthenticated();
+      allow write: if false;
+      allow read: if isTeacher();
     }
     match /results/{jobId} {
-      allow write: if false; 
-      allow read: if isAuthenticated();
+      allow write: if false;
+      allow read: if isTeacher();
     }
-    
+
     match /knowledgeBase/{classId}/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId));
       allow write: if isTeacher();
     }
-    
+
+    match /moduleResources/{classId}/{docId} {
+      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId));
+      allow write: if isTeacher();
+    }
+
     match /assignments/{classId}/{fileId} {
-      // Teachers create assignments; Students can read them IF enrolled in the class
       allow write: if isTeacher();
       allow read: if isAuthenticated() && (
-        isTeacher() || 
-        (firestore.exists(/databases/(default)/documents/classes/$(classId)) &&
-         request.auth.uid in firestore.get(/databases/(default)/documents/classes/$(classId)).data.studentIds)
+        isTeacher() || isEnrolledInClass(classId)
       );
     }
 
-    
     match /avatars/{uid} {
-      // Authenticated user writes their own; public read
-      allow write: if isAuthenticated() && request.auth.uid == uid;
-      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 5 * 1024 * 1024;
+      allow read: if isAuthenticated();
     }
-    
+
     match /{allPaths=**} {
-      // Default deny for all other paths
       allow read, write: if false;
     }
   }

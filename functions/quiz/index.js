@@ -263,3 +263,206 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// getCalendarToken — HTTPS Callable
+// Generates or retrieves a unique calendar token for the student.
+// Stored in users/{uid}.calendarToken
+// ---------------------------------------------------------------------------
+exports.getCalendarToken = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = context.auth.uid;
+  const userRef = admin.firestore().collection("users").doc(uid);
+  const userDoc = await userRef.get();
+
+  if (userDoc.exists && userDoc.data().calendarToken) {
+    return { token: userDoc.data().calendarToken };
+  }
+
+  // Generate a unique token
+  const crypto = require("crypto");
+  const token = crypto.randomBytes(24).toString("hex");
+
+  await userRef.set({ calendarToken: token }, { merge: true });
+
+  return { token };
+});
+
+// ---------------------------------------------------------------------------
+// calendarFeed — Public HTTP endpoint
+// Serves a live .ics feed for a student based on their calendar token.
+// URL: /calendarFeed?token=xxx
+// Google Calendar subscribes to this URL and auto-refreshes.
+// ---------------------------------------------------------------------------
+exports.calendarFeed = functions.https.onRequest(async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token || typeof token !== "string" || token.length > 256 || token.length < 10) {
+      res.status(400).send("Invalid token parameter.");
+      return;
+    }
+
+    // Find the user with this calendar token
+    const usersSnap = await admin.firestore()
+      .collection("users")
+      .where("calendarToken", "==", token)
+      .limit(1)
+      .get();
+
+    if (usersSnap.empty) {
+      res.status(404).send("Invalid calendar token.");
+      return;
+    }
+
+    const userDoc = usersSnap.docs[0];
+    const uid = userDoc.id;
+    const userData = userDoc.data();
+
+    // Get student's enrolled classes
+    const classesSnap = await admin.firestore()
+      .collection("classes")
+      .where("studentIds", "array-contains", uid)
+      .get();
+
+    const classIds = classesSnap.docs.map(d => d.id);
+    const classMap = {};
+    classesSnap.docs.forEach(d => { classMap[d.id] = d.data(); });
+
+    if (classIds.length === 0) {
+      res.set("Content-Type", "text/calendar; charset=utf-8");
+      res.send([
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//TikiTaka//Assignments//EN",
+        "X-WR-CALNAME:TikiTaka Schedule",
+        "END:VCALENDAR",
+      ].join("\r\n"));
+      return;
+    }
+
+    // Fetch all assignments across enrolled classes (batch in groups of 10)
+    const allAssignments = [];
+    for (let i = 0; i < classIds.length; i += 10) {
+      const batch = classIds.slice(i, i + 10);
+      const assignSnap = await admin.firestore()
+        .collection("assignments")
+        .where("classId", "in", batch)
+        .get();
+      assignSnap.docs.forEach(d => allAssignments.push({ id: d.id, ...d.data() }));
+    }
+
+    // Check for per-student extension due dates
+    const extensionDueDates = {};
+    classesSnap.docs.forEach(d => {
+      const data = d.data();
+      const dueDatesMap = data.extensionDueDates || {};
+      Object.entries(dueDatesMap).forEach(([key, val]) => {
+        if (key.startsWith(uid + "_")) {
+          const assignId = key.slice(uid.length + 1);
+          extensionDueDates[assignId] = val.toDate ? val.toDate() : new Date(val);
+        }
+      });
+    });
+
+    // Build ICS
+    const pad = (n) => n.toString().padStart(2, "0");
+    const formatDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//TikiTaka//Assignments//EN",
+      "X-WR-CALNAME:TikiTaka Schedule",
+      "METHOD:PUBLISH",
+    ];
+
+    allAssignments.forEach(a => {
+      if (!a.dueDate) return;
+
+      const rawDue = a.dueDate.toDate ? a.dueDate.toDate() : new Date(a.dueDate);
+      const dueDate = extensionDueDates[a.id] || rawDue;
+      const nextDay = new Date(dueDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const className = classMap[a.classId]?.name || "Class";
+
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:tikitaka-${a.id}@tikitaka.ai`,
+        `DTSTART;VALUE=DATE:${formatDate(dueDate)}`,
+        `DTEND;VALUE=DATE:${formatDate(nextDay)}`,
+        `SUMMARY:📝 ${a.title} - Due`,
+        `DESCRIPTION:Assignment due for ${className} (${a.totalPoints || 100} points)`,
+        `LOCATION:TikiTaka - ${className}`,
+        "BEGIN:VALARM",
+        "TRIGGER:-P1D",
+        "ACTION:DISPLAY",
+        `DESCRIPTION:Reminder: "${a.title}" is due tomorrow!`,
+        "END:VALARM",
+        "END:VEVENT"
+      );
+    });
+
+    // Fetch class schedule blocks (recurring class times)
+    const teacherIds = [...new Set(classesSnap.docs.map(d => d.data().teacherId).filter(Boolean))];
+    const dayToICS = { Monday: "MO", Tuesday: "TU", Wednesday: "WE", Thursday: "TH", Friday: "FR" };
+    const dayToNum = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
+
+    for (let i = 0; i < teacherIds.length; i += 30) {
+      const batch = teacherIds.slice(i, i + 30);
+      const schedSnap = await admin.firestore()
+        .collection("schedules")
+        .where("teacherId", "in", batch)
+        .get();
+
+      schedSnap.docs.forEach(d => {
+        const block = d.data();
+        // Only include blocks for classes the student is enrolled in
+        if (!classIds.includes(block.classId)) return;
+
+        const className = classMap[block.classId]?.name || "Class";
+        const icsDay = dayToICS[block.day];
+        if (!icsDay) return;
+
+        // Create a start date for the first occurrence (find next matching day)
+        const now = new Date();
+        const currentDayNum = now.getDay() === 0 ? 7 : now.getDay(); // 1=Mon
+        const targetDayNum = dayToNum[block.day];
+        let daysUntil = targetDayNum - currentDayNum;
+        if (daysUntil < 0) daysUntil += 7;
+        const startDate = new Date(now);
+        startDate.setDate(now.getDate() + daysUntil);
+
+        const [startH, startM] = block.startTime.split(":").map(Number);
+        const [endH, endM] = block.endTime.split(":").map(Number);
+
+        const formatDateTime = (d, h, m) =>
+          `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:tikitaka-sched-${d.id}@tikitaka.ai`,
+          `DTSTART:${formatDateTime(startDate, startH, startM)}`,
+          `DTEND:${formatDateTime(startDate, endH, endM)}`,
+          `RRULE:FREQ=WEEKLY;BYDAY=${icsDay}`,
+          `SUMMARY:📚 ${className}`,
+          `DESCRIPTION:${className}${block.room ? " - Room: " + block.room : ""}`,
+          block.room ? `LOCATION:${block.room}` : "",
+          "END:VEVENT"
+        );
+      });
+    }
+
+    lines.push("END:VCALENDAR");
+
+    res.set("Content-Type", "text/calendar; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
+    // Filter out any empty lines from optional fields
+    res.send(lines.filter(l => l).join("\r\n"));
+  } catch (err) {
+    console.error("Calendar feed error:", err);
+    res.status(500).send("Internal server error.");
+  }
+});
+

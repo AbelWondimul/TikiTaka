@@ -25,6 +25,38 @@
         "destination": "/teacher/class/[classId].html"
       },
       {
+        "source": "/teacher/class/:classId/analytics",
+        "destination": "/teacher/class/[classId]/analytics.html"
+      },
+      {
+        "source": "/teacher/class/:classId/modules",
+        "destination": "/teacher/class/[classId]/modules.html"
+      },
+      {
+        "source": "/teacher/class/:classId/attendance",
+        "destination": "/teacher/class/[classId]/attendance.html"
+      },
+      {
+        "source": "/teacher/class/:classId/office-hours",
+        "destination": "/teacher/class/[classId]/office-hours.html"
+      },
+      {
+        "source": "/teacher/class/:classId/forum",
+        "destination": "/teacher/class/[classId]/forum.html"
+      },
+      {
+        "source": "/student/class/:classId/modules",
+        "destination": "/student/class/[classId]/modules.html"
+      },
+      {
+        "source": "/student/class/:classId/office-hours",
+        "destination": "/student/class/[classId]/office-hours.html"
+      },
+      {
+        "source": "/student/class/:classId/forum",
+        "destination": "/student/class/[classId]/forum.html"
+      },
+      {
         "source": "/teacher/class/:classId/student/:uid",
         "destination": "/teacher/class/[classId]/student/[uid].html"
       },

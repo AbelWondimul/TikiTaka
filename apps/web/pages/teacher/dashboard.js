@@ -1,45 +1,161 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { useRouter } from 'next/router';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
-import Logo from '@/components/layout/Logo';
+import TeacherLayout from '@/components/layout/TeacherLayout';
+import { generateClassCode } from '@/lib/classUtils';
+import { getRelativeTime } from '@/lib/dateUtils';
 
-// Convert user's name format to "Good morning, Professor [Lastname]" 
+// Convert user's name format to "Good morning, Professor [Lastname]"
 const getGreeting = (displayName) => {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  
+
   if (!displayName) return `${greeting}, Professor`;
-  
+
   const parts = displayName.trim().split(' ');
   let lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0];
   if (lastName) {
     lastName = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
   }
-  
-  return `${greeting}, Professor ${lastName}`;
-};
 
-const getRelativeTime = (timestamp) => {
-  if (!timestamp) return 'Just now';
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-  const diff = Math.floor((new Date() - date) / 1000 / 60);
-  if (diff < 1) return 'Just now';
-  if (diff < 60) return `${diff} mins ago`;
-  const hours = Math.floor(diff / 60);
-  if (hours < 24) return `${hours} hours ago`;
-  return `${Math.floor(hours / 24)} days ago`;
+  return `${greeting}, Professor ${lastName}`;
 };
 
 function TeacherDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const [classes, setClasses] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [quizCount, setQuizCount] = useState(0);
+  const [avgScore, setAvgScore] = useState(null);
+
+  // Class menu state
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [editingClassId, setEditingClassId] = useState(null);
+  const [editingClassName, setEditingClassName] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [archiveConfirmId, setArchiveConfirmId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const menuRef = useRef(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleCopyCode = (classCode, classId) => {
+    navigator.clipboard.writeText(classCode);
+    setCopiedId(classId);
+    setOpenMenuId(null);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleToggleInvites = async (c) => {
+    try {
+      await updateDoc(doc(db, 'classes', c.id), {
+        invitesDisabled: !c.invitesDisabled
+      });
+      setClasses(prev => prev.map(cls => cls.id === c.id ? { ...cls, invitesDisabled: !cls.invitesDisabled } : cls));
+    } catch (err) {
+      console.error('Error toggling invites:', err);
+    }
+    setOpenMenuId(null);
+  };
+
+  const handleArchiveClass = async (c) => {
+    try {
+      await updateDoc(doc(db, 'classes', c.id), {
+        archived: !c.archived
+      });
+      setClasses(prev => prev.map(cls => cls.id === c.id ? { ...cls, archived: !cls.archived } : cls));
+    } catch (err) {
+      console.error('Error archiving class:', err);
+    }
+    setOpenMenuId(null);
+  };
+
+  const handleRenameClass = async (classId) => {
+    if (!editingClassName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'classes', classId), { name: editingClassName.trim() });
+      setClasses(prev => prev.map(cls => cls.id === classId ? { ...cls, name: editingClassName.trim() } : cls));
+    } catch (err) {
+      console.error('Error renaming class:', err);
+    }
+    setEditingClassId(null);
+    setEditingClassName('');
+  };
+
+  const handleCloneClass = async (c) => {
+    try {
+      const newCode = generateClassCode();
+      const newClassRef = await addDoc(collection(db, 'classes'), {
+        teacherId: user.uid,
+        name: `${c.name} (Copy)`,
+        classCode: newCode,
+        studentIds: [],
+        createdAt: serverTimestamp(),
+      });
+      // Clone assignments
+      const assignQ = query(collection(db, 'assignments'), where('classId', '==', c.id));
+      const assignSnap = await getDocs(assignQ);
+      for (const d of assignSnap.docs) {
+        const data = d.data();
+        await addDoc(collection(db, 'assignments'), { ...data, classId: newClassRef.id, createdAt: serverTimestamp() });
+      }
+      // Clone modules
+      const modQ = query(collection(db, 'modules'), where('classId', '==', c.id));
+      const modSnap = await getDocs(modQ);
+      const moduleIdMap = {};
+      for (const d of modSnap.docs) {
+        const data = d.data();
+        const newMod = await addDoc(collection(db, 'modules'), { ...data, classId: newClassRef.id, teacherId: user.uid, createdAt: serverTimestamp() });
+        moduleIdMap[d.id] = newMod.id;
+      }
+      // Clone module resources
+      const resQ = query(collection(db, 'moduleResources'), where('classId', '==', c.id));
+      const resSnap = await getDocs(resQ);
+      for (const d of resSnap.docs) {
+        const data = d.data();
+        await addDoc(collection(db, 'moduleResources'), { ...data, classId: newClassRef.id, teacherId: user.uid, moduleId: moduleIdMap[data.moduleId] || data.moduleId, createdAt: serverTimestamp() });
+      }
+      // Clone schedules
+      const schedQ = query(collection(db, 'schedules'), where('classId', '==', c.id));
+      const schedSnap = await getDocs(schedQ);
+      for (const d of schedSnap.docs) {
+        const data = d.data();
+        await addDoc(collection(db, 'schedules'), { ...data, classId: newClassRef.id, teacherId: user.uid, updatedAt: serverTimestamp() });
+      }
+      setOpenMenuId(null);
+      fetchDashboardData();
+    } catch (err) {
+      console.error('Error cloning class:', err);
+    }
+  };
+
+  const handleDeleteClass = async (classId) => {
+    try {
+      await deleteDoc(doc(db, 'classes', classId));
+      setClasses(prev => prev.filter(cls => cls.id !== classId));
+    } catch (err) {
+      console.error('Error deleting class:', err);
+    }
+    setDeleteConfirmId(null);
+    setOpenMenuId(null);
+  };
 
   // Instead of using complex indexes for sorting directly on Firebase,
   // we do an in-memory sort to avoid index errors initially.
@@ -60,13 +176,27 @@ function TeacherDashboard() {
       const subsSnap = await getDocs(subsQ);
       let subs = [];
       subsSnap.forEach(doc => subs.push({ id: doc.id, ...doc.data() }));
-      
+
       subs.sort((a, b) => {
         const da = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
         const dbTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
         return dbTime - da;
       });
       setRecentActivities(subs.slice(0, 6)); // Top 6 most recent
+
+      // Compute average score from completed grading jobs
+      const gradedJobs = subs.filter(s => s.status === 'complete' && s.score != null && s.totalPoints);
+      if (gradedJobs.length > 0) {
+        const totalPct = gradedJobs.reduce((sum, j) => sum + (j.score / j.totalPoints) * 100, 0);
+        setAvgScore(Math.round(totalPct / gradedJobs.length));
+      } else {
+        setAvgScore(null);
+      }
+
+      // Fetch quizzes across all teacher's classes
+      const quizzesQ = query(collection(db, 'quizzes'), where('teacherId', '==', user.uid));
+      const quizzesSnap = await getDocs(quizzesQ);
+      setQuizCount(quizzesSnap.size);
       
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -83,113 +213,14 @@ function TeacherDashboard() {
   const displayPendingCount = Math.max(recentActivities.filter(sub => sub.status !== 'complete').length, 0);
 
   return (
-    <>
+    <TeacherLayout activePage="dashboard">
       <Head>
         <title>Teacher Dashboard - TikiTaka AI</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-        <style>{`
-          body { font-family: 'Inter', sans-serif; background-color: #F9FAFB; color: #191c1d; }
-          .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          }
-        `}</style>
       </Head>
-
-      {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-white/85 backdrop-blur-md shadow-[0_1px_3px_rgba(17,24,39,0.06)] flex items-center justify-between px-8 h-16">
-        <div className="flex items-center gap-12">
-          {/* Maintained precise formatting of green/black Logo component */}
-          <Link href="/teacher/dashboard">
-             <Logo />
-          </Link>
-          <nav className="hidden md:flex items-center space-x-8 h-full">
-            <Link href="/teacher/dashboard" className="text-teal-700 font-bold border-b-2 border-teal-700 py-5 transition-colors duration-200">
-              Dashboard
-            </Link>
-            <Link href="#" className="text-slate-600 font-medium py-5 hover:text-teal-600 transition-colors duration-200">
-              Schedule
-            </Link>
-            <Link href="#" className="text-slate-600 font-medium py-5 hover:text-teal-600 transition-colors duration-200">
-              Resources
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center space-x-6">
-          {/* SEARCH BAR REMOVED HERE AS REQUESTED */}
-          <div className="flex items-center space-x-4 text-slate-600">
-            <span className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors">notifications</span>
-            <span className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors">help</span>
-            <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-200 border border-slate-200">
-              {user?.photoURL ? (
-                <img className="w-full h-full object-cover" src={user.photoURL} alt="Profile" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-teal-100 text-teal-800 font-bold">
-                  {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Side Navigation Bar */}
-      <aside className="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-slate-50 flex flex-col p-4 space-y-2 border-r border-slate-200">
-        <div className="px-4 py-6 mb-2">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-[#0f766e] rounded-lg flex items-center justify-center text-white">
-              <span className="material-symbols-outlined">school</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-teal-800 leading-none">Main Menu</h2>
-              <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">Academic Management</p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1">
-          <Link href="/teacher/dashboard" className="flex items-center space-x-3 px-4 py-3 bg-[#CCFBF1] text-[#0F766E] font-bold shadow-sm rounded-lg border-l-4 border-[#0F766E] transition-all duration-200">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>dashboard</span>
-            <span className="text-sm tracking-normal">Overview</span>
-          </Link>
-          <Link href="#" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">school</span>
-            <span className="text-sm tracking-normal">My Classes</span>
-          </Link>
-          <Link href="#" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">assignment</span>
-            <span className="text-sm tracking-normal">Submissions</span>
-          </Link>
-          <Link href="#" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">quiz</span>
-            <span className="text-sm tracking-normal">Quizzes</span>
-          </Link>
-          <Link href="/teacher/messages" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">chat</span>
-            <span className="text-sm tracking-normal">Messages</span>
-          </Link>
-          <Link href="#" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">group</span>
-            <span className="text-sm tracking-normal">Students</span>
-          </Link>
-          <Link href="#" className="flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200">
-            <span className="material-symbols-outlined">settings</span>
-            <span className="text-sm tracking-normal">Settings</span>
-          </Link>
-        </nav>
-        <div className="mt-auto pt-4 border-t border-slate-200">
-          <button className="w-full bg-[#005c55] py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
-            <span className="material-symbols-outlined text-lg">add</span>
-            <span>New Class</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="ml-64 mt-16 p-10 min-h-[calc(100vh-64px)] bg-[#F9FAFB]">
         {/* Header Section */}
         <header className="mb-10">
           <h1 className="text-[28px] font-bold text-[#191c1d] tracking-tight">{getGreeting(user?.displayName)}</h1>
-          <p className="text-sm font-normal text-slate-500 mt-1">You have {displayPendingCount || 7} pending submissions to review today.</p>
+          <p className="text-sm font-normal text-slate-500 mt-1">You have {displayPendingCount} pending submission{displayPendingCount !== 1 ? 's' : ''} to review today.</p>
         </header>
 
         {/* Stats Row */}
@@ -197,31 +228,33 @@ function TeacherDashboard() {
           <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
             <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Total Students</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{totalStudents || 84}</span>
-              <span className="text-emerald-600 text-xs font-bold">+4 new</span>
+              <span className="text-3xl font-extrabold text-teal-800">{totalStudents}</span>
             </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
             <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Pending</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{displayPendingCount || 7}</span>
-              <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-[10px] font-bold">Action Needed</span>
+              <span className="text-3xl font-extrabold text-teal-800">{displayPendingCount}</span>
+              {displayPendingCount > 0 && (
+                <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-[10px] font-bold">Action Needed</span>
+              )}
             </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
             <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Quizzes</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">12</span>
-              <span className="text-slate-400 text-xs font-medium">3 active</span>
+              <span className="text-3xl font-extrabold text-teal-800">{quizCount}</span>
             </div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
             <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Avg Score</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">78%</span>
-              <div className="w-16 bg-slate-100 h-1 rounded-full overflow-hidden self-center">
-                <div className="bg-[#005c55] h-full w-[78%]"></div>
-              </div>
+              <span className="text-3xl font-extrabold text-teal-800">{avgScore != null ? `${avgScore}%` : '--'}</span>
+              {avgScore != null && (
+                <div className="w-16 bg-slate-100 h-1 rounded-full overflow-hidden self-center">
+                  <div className="bg-[#005c55] h-full" style={{ width: `${avgScore}%` }}></div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -231,7 +264,6 @@ function TeacherDashboard() {
           <section className="xl:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-[#191c1d] tracking-tight">Your Classes</h2>
-              <button className="text-[#005c55] text-sm font-semibold hover:underline">View All</button>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -242,27 +274,155 @@ function TeacherDashboard() {
                     <p className="text-slate-500">No classes found.</p>
                  </div>
               ) : (
-                classes.map((c) => (
-                  <div key={c.id} className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col">
+                classes.filter(c => !c.archived).map((c) => (
+                  <div key={c.id} className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col relative">
                     <div className="flex justify-between items-start mb-4">
-                      {/* Shorten name dynamically for label like BIO-A */}
                       <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
                         {(c.name || 'CLASS').substring(0, 5)}
                       </span>
-                      <span className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-slate-500">more_vert</span>
+                      <div className="flex items-center gap-1">
+                        <span
+                          className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-teal-600 transition-colors text-[20px]"
+                          title="Analytics"
+                          onClick={() => router.push(`/teacher/class/${c.id}/analytics`)}
+                        >bar_chart</span>
+                        <div className="relative" ref={openMenuId === c.id ? menuRef : null}>
+                          <span
+                            className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-slate-500"
+                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === c.id ? null : c.id); }}
+                          >more_vert</span>
+
+                          {openMenuId === c.id && (
+                            <div className="absolute right-0 top-8 z-50 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1 animate-in fade-in zoom-in-95 duration-150">
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                onClick={() => { handleCopyCode(c.classCode, c.id); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                                Copy Invite Code
+                              </button>
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); setOpenMenuId(null); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                Edit Name
+                              </button>
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                onClick={() => handleToggleInvites(c)}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">{c.invitesDisabled ? 'lock_open' : 'lock'}</span>
+                                {c.invitesDisabled ? 'Enable Invites' : 'Close Invites'}
+                              </button>
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                onClick={() => handleCloneClass(c)}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                                Clone Class
+                              </button>
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                onClick={() => { setArchiveConfirmId(c.id); setOpenMenuId(null); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                                Archive Class
+                              </button>
+                              <div className="border-t border-slate-100 my-1" />
+                              <button
+                                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                                onClick={() => { setDeleteConfirmId(c.id); setOpenMenuId(null); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                                Delete Class
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-bold text-teal-800 mb-1 line-clamp-1">{c.name}</h3>
-                    <p className="text-slate-500 text-xs font-medium mb-6 flex-1">{c.studentIds?.length || 0} students enrolled</p>
-                    
-                    {/* Curriculum bar removed as requested */}
-                    
-                    <Link href={`/teacher/class/${c.id}`} className="w-full flex items-center justify-center py-2 text-[#005c55] font-bold text-sm bg-slate-50 rounded-lg hover:bg-[#005c55] hover:text-white transition-colors mt-auto">
-                      View Class
-                    </Link>
+
+                    {/* Inline rename */}
+                    {editingClassId === c.id ? (
+                      <div className="mb-4">
+                        <input
+                          className="w-full border border-teal-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          value={editingClassName}
+                          onChange={(e) => setEditingClassName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleRenameClass(c.id); if (e.key === 'Escape') setEditingClassId(null); }}
+                          autoFocus
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button onClick={() => handleRenameClass(c.id)} className="px-3 py-1 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700">Save</button>
+                          <button onClick={() => setEditingClassId(null)} className="px-3 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-bold text-teal-800 mb-1 line-clamp-1">{c.name}</h3>
+                        <div className="flex items-center gap-2 mb-6 flex-1">
+                          <p className="text-slate-500 text-xs font-medium">{c.studentIds?.length || 0} students enrolled</p>
+                          {c.invitesDisabled && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Invites off</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {copiedId === c.id && (
+                      <div className="absolute top-14 right-4 bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-150">
+                        Code copied!
+                      </div>
+                    )}
+
+                    {/* Archive confirmation */}
+                    {archiveConfirmId === c.id ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-auto">
+                        <p className="text-xs font-semibold text-amber-700 mb-2">Are you sure you want to archive "{c.name}"?</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => { handleArchiveClass(c); setArchiveConfirmId(null); }} className="px-3 py-1.5 text-xs font-bold bg-amber-600 text-white rounded-md hover:bg-amber-700">Archive</button>
+                          <button onClick={() => setArchiveConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                        </div>
+                      </div>
+                    ) : deleteConfirmId === c.id ? (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-auto">
+                        <p className="text-xs font-semibold text-red-700 mb-2">Are you sure you want to delete "{c.name}"? This cannot be undone.</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleDeleteClass(c.id)} className="px-3 py-1.5 text-xs font-bold bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                          <button onClick={() => setDeleteConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Link href={`/teacher/class/${c.id}`} className="w-full flex items-center justify-center py-2 text-[#005c55] font-bold text-sm bg-slate-50 rounded-lg hover:bg-[#005c55] hover:text-white transition-colors mt-auto">
+                        View Class
+                      </Link>
+                    )}
                   </div>
                 ))
               )}
             </div>
+
+            {/* Archived Classes */}
+            {classes.some(c => c.archived) && (
+              <div className="mt-8">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Archived</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {classes.filter(c => c.archived).map((c) => (
+                    <div key={c.id} className="bg-slate-50 p-5 rounded-xl border border-slate-200 opacity-70 hover:opacity-100 transition-opacity flex flex-col">
+                      <h3 className="text-sm font-bold text-slate-500 mb-1 line-clamp-1">{c.name}</h3>
+                      <p className="text-slate-400 text-xs font-medium mb-3">{c.studentIds?.length || 0} students</p>
+                      <button
+                        onClick={() => handleArchiveClass(c)}
+                        className="text-xs font-semibold text-teal-600 hover:text-teal-800 mt-auto"
+                      >
+                        Unarchive
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Recent Activity (1/3 width) */}
@@ -292,59 +452,16 @@ function TeacherDashboard() {
                     </div>
                   ))
                 ) : (
-                  // Demo UI if no live data found, purely to match the UI screenshot
-                  <>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">New submission from Sarah Chen</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Biology 101 • 12 mins ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">Quiz 'Cell Structure' completed</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Advanced Physics • 45 mins ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">New student enrolled</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Organic Chemistry • 2 hours ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">Grade update: Marcus Doe</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Biology 101 • 3 hours ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">Assignment posted</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Advanced Physics • 5 hours ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">System maintenance notification</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Global • 8 hours ago</p>
-                      </div>
-                    </div>
-                  </>
+                  <div className="text-center py-8">
+                    <p className="text-sm text-slate-400">No recent activity yet.</p>
+                  </div>
                 )}
                 
               </div>
             </div>
           </section>
         </div>
-      </main>
-    </>
+    </TeacherLayout>
   );
 }
 
