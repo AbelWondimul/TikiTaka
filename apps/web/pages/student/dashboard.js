@@ -33,7 +33,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import StudentNavTabs from '@/components/layout/StudentNavTabs';
-import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, Sparkles, CalendarCheck, MoreVertical, LogOut } from 'lucide-react';
+import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, Sparkles, CalendarCheck, MoreVertical, LogOut, CheckCircle2 } from 'lucide-react';
 import TikaChatbot from '@/components/TikaChatbot';
 
 // Map class index to icon colors for variety

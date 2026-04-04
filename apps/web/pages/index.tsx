@@ -1,7 +1,6 @@
 import { useRouter } from 'next/router';
 import LiquidMetalHero from '@/components/ui/liquid-metal-hero';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
-import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
