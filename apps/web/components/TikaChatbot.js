@@ -152,7 +152,7 @@ export default function TikaChatbot({ enrolledClasses = [], assignments = [], su
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-[#005c55] to-[#0f766e] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
+          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gradient-to-br from-[#005c55] to-[#0f766e] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
         >
           <Sparkles className="h-6 w-6 group-hover:hidden" />
           <MessageCircle className="h-6 w-6 hidden group-hover:block" />
@@ -161,7 +161,7 @@ export default function TikaChatbot({ enrolledClasses = [], assignments = [], su
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-3rem)] bg-background border border-border/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-50 w-full sm:w-[380px] sm:max-w-[calc(100vw-2rem)] h-[100vh] sm:h-[520px] sm:max-h-[calc(100vh-3rem)] bg-background border border-border/60 sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-200">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-[#005c55] to-[#0f766e] text-white shrink-0">
             <div className="flex items-center gap-2.5">

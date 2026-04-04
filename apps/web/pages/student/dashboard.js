@@ -33,7 +33,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import StudentNavTabs from '@/components/layout/StudentNavTabs';
-import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, LineChart, Sparkles, CalendarCheck, MessageSquare, MoreVertical, LogOut, Trophy } from 'lucide-react';
+import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, Sparkles, CalendarCheck, MoreVertical, LogOut } from 'lucide-react';
 import TikaChatbot from '@/components/TikaChatbot';
 
 // Map class index to icon colors for variety
@@ -353,7 +353,7 @@ function StudentDashboard() {
       
       <StudentNavTabs active="dashboard" />
 
-      <div className="max-w-5xl mx-auto px-6 py-6 pb-28 md:pb-10 space-y-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-8">
         <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest font-semibold">
           <LayoutDashboard className="h-3 w-3" />
           <span>Dashboard</span>
@@ -671,30 +671,6 @@ function StudentDashboard() {
           </div>
         </div>
       </div>
-
-      {/* ── Bottom Navigation (Mobile) ── */}
-      <nav className="fixed bottom-0 left-0 w-full md:hidden flex justify-around items-center px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/50 z-50">
-        <Link href="/student/dashboard" className="flex flex-col items-center gap-1 text-primary">
-          <LayoutDashboard className="h-6 w-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Dashboard</span>
-        </Link>
-        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
-          <ClipboardList className="h-6 w-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Submissions</span>
-        </Link>
-        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
-          <Trophy className="h-6 w-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Quizzes</span>
-        </Link>
-        <Link href="#" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
-          <LineChart className="h-6 w-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Progress</span>
-        </Link>
-        <Link href="/student/messages" className="flex flex-col items-center gap-1 text-muted-foreground/60 hover:text-primary transition-all">
-          <MessageSquare className="h-6 w-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Messages</span>
-        </Link>
-      </nav>
 
       {/* Tika Chatbot */}
       {chatbotEnabled && (
