@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { db, auth } from '@/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import Header from '@/components/layout/Header';
@@ -24,6 +25,9 @@ function StudentSettings() {
 
   // Profile
   const [displayName, setDisplayName] = useState('');
+  const [photoURL, setPhotoURL] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
 
   // Notification prefs
   const [notifAssignments, setNotifAssignments] = useState(true);
@@ -50,6 +54,7 @@ function StudentSettings() {
     setIsLoading(true);
     try {
       setDisplayName(user.displayName || '');
+      setPhotoURL(user.photoURL || '');
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
         const prefs = userDoc.data().settings || {};
@@ -62,6 +67,22 @@ function StudentSettings() {
       }
     } catch (err) { console.error(err); }
     finally { setIsLoading(false); }
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError('Photo must be under 5MB.'); return; }
+    setIsUploadingPhoto(true);
+    try {
+      const storageRef = ref(storage, `avatars/${user.uid}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      await updateProfile(auth.currentUser, { photoURL: url });
+      await updateDoc(doc(db, 'users', user.uid), { photoURL: url });
+      setPhotoURL(url);
+    } catch (err) { console.error(err); setError('Failed to upload photo.'); }
+    finally { setIsUploadingPhoto(false); }
   };
 
   const handleSave = async () => {
@@ -132,6 +153,25 @@ function StudentSettings() {
             <CardTitle className="flex items-center text-base"><User className="h-4 w-4 mr-2 text-primary" /> Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="h-16 w-16 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center border-2 border-border cursor-pointer" onClick={() => photoInputRef.current?.click()}>
+                  {photoURL ? (
+                    <img src={photoURL} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xl font-bold text-primary">{(displayName || user?.email || 'U').charAt(0).toUpperCase()}</span>
+                  )}
+                  {isUploadingPhoto && <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-full"><Loader2 className="h-5 w-5 animate-spin text-white" /></div>}
+                </div>
+                <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Profile Photo</p>
+                <button className="text-xs text-primary hover:underline" onClick={() => photoInputRef.current?.click()}>
+                  {photoURL ? 'Change photo' : 'Upload photo'}
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Display Name</Label>
               <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="rounded-xl" />
