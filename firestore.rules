@@ -491,6 +491,16 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Sent Emails (teacher email records)
+    // ─────────────────────────────────────────
+
+    match /sentEmails/{emailId} {
+      allow create: if isTeacher() && request.resource.data.senderId == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────
     // Submission Drafts (student text submission drafts)
     // ─────────────────────────────────────────
 
