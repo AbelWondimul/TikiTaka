@@ -12,7 +12,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Edit3 } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Edit3, FileType } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 
 function TeacherSubmissionReview() {
   const router = useRouter();
@@ -120,6 +123,23 @@ function TeacherSubmissionReview() {
                <AlertTriangle className="w-4 h-4 mr-2" />
                <AlertDescription className="font-medium">Edge Cases Detected: Verify difficult to read sections below.</AlertDescription>
              </Alert>
+          )}
+
+          {/* Text submission display */}
+          {submission?.submissionType === 'text' && submission?.submissionText && (
+            <Card className="rounded-xl shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileType className="h-4 w-4 text-primary" />
+                  Student Text Submission
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-xl p-4 bg-muted/10 max-h-[600px] overflow-y-auto">
+                  <MathRenderer content={submission.submissionText} />
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {downloadUrl && (

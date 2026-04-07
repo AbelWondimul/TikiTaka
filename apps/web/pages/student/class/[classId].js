@@ -2,15 +2,16 @@ import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
+import {
+  collection,
+  query,
+  where,
+  getDocs,
   getDoc,
-  doc, 
+  doc,
   setDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   serverTimestamp,
   orderBy
@@ -35,7 +36,10 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Clock, BookOpen, ChevronDown, MessageCircleQuestion, CalendarPlus, Ticket, Calculator, TrendingUp } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Clock, BookOpen, ChevronDown, MessageCircleQuestion, CalendarPlus, Ticket, Calculator, TrendingUp, Save, FileType } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
 
 function StudentClassDetail() {
   const router = useRouter();
@@ -64,6 +68,13 @@ function StudentClassDetail() {
   const [submitError, setSubmitError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+
+  // Text Submission State
+  const [submissionMode, setSubmissionMode] = useState('pdf'); // 'pdf' | 'text'
+  const [submissionText, setSubmissionText] = useState('');
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftTimerRef = useRef(null);
 
   // Active Job State
   const [activeJobId, setActiveJobId] = useState(null);
@@ -295,6 +306,75 @@ function StudentClassDetail() {
     }
   };
 
+  // --- Draft Save/Load ---
+  const saveDraft = async (content) => {
+    if (!user || !classId || !selectedAssignmentId || !content) return;
+    setDraftSaving(true);
+    try {
+      const draftId = `${user.uid}_${selectedAssignmentId}`;
+      await setDoc(doc(db, 'submissionDrafts', draftId), {
+        studentId: user.uid,
+        classId,
+        assignmentId: selectedAssignmentId,
+        content,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Error saving draft:', err);
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
+  const loadDraft = async (assignmentId) => {
+    if (!user || !assignmentId) return;
+    try {
+      const draftId = `${user.uid}_${assignmentId}`;
+      const draftSnap = await getDoc(doc(db, 'submissionDrafts', draftId));
+      if (draftSnap.exists()) {
+        setSubmissionText(draftSnap.data().content || '');
+        setDraftLoaded(true);
+      } else {
+        setSubmissionText('');
+        setDraftLoaded(false);
+      }
+    } catch (err) {
+      console.error('Error loading draft:', err);
+    }
+  };
+
+  const deleteDraft = async (assignmentId) => {
+    if (!user || !assignmentId) return;
+    try {
+      const draftId = `${user.uid}_${assignmentId}`;
+      await deleteDoc(doc(db, 'submissionDrafts', draftId));
+    } catch {
+      // Ignore delete errors
+    }
+  };
+
+  // Auto-save draft on text change (debounced)
+  const handleTextUpdate = (html) => {
+    setSubmissionText(html);
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      saveDraft(html);
+    }, 2000);
+  };
+
+  // Load draft when assignment is selected
+  useEffect(() => {
+    if (selectedAssignmentId) {
+      const assignment = assignments.find(a => a.id === selectedAssignmentId);
+      const type = assignment?.submissionType || 'pdf';
+      setSubmissionMode(type === 'both' ? 'pdf' : type);
+      loadDraft(selectedAssignmentId);
+    } else {
+      setSubmissionText('');
+      setDraftLoaded(false);
+    }
+  }, [selectedAssignmentId]);
+
   const handleJobSubmit = async () => {
     if (!currentClass) return;
     
@@ -312,15 +392,21 @@ function StudentClassDetail() {
     
     const derivedRubricType = selectedAssignment.rubricType || 'text';
 
-    if (!uploadFile) {
+    const isTextSubmission = submissionMode === 'text';
+
+    if (!isTextSubmission && !uploadFile) {
       setSubmitError("Please select a PDF file to submit.");
+      return;
+    }
+    if (isTextSubmission && !submissionText.trim()) {
+      setSubmitError("Please enter your answer before submitting.");
       return;
     }
 
     setIsSubmittingJob(true);
     setSubmitError(null);
     setUploadProgress(0);
-    
+
     // Reset active job
     setActiveJobId(null);
     setJobStatus(null);
@@ -335,12 +421,7 @@ function StudentClassDetail() {
       setActiveJobId(jobId);
       setJobStatus('uploading');
 
-      const storagePath = `raw/${user.uid}/${jobId}.pdf`;
-      await uploadWithProgress(storagePath, uploadFile, (progress) => {
-        setUploadProgress(progress);
-      });
-
-      await setDoc(jobRef, {
+      const jobData = {
         status: 'queued',
         studentId: user.uid,
         classId: classId,
@@ -349,18 +430,37 @@ function StudentClassDetail() {
         teacherId: currentClass.teacherId,
         rubric: finalRubric,
         rubricType: derivedRubricType,
-        rawPdfUrl: storagePath,
+        submissionType: isTextSubmission ? 'text' : 'pdf',
+        rawPdfUrl: null,
         resultPdfUrl: null,
         score: null,
         createdAt: serverTimestamp()
-      });
+      };
+
+      if (isTextSubmission) {
+        jobData.submissionText = submissionText;
+      } else {
+        const storagePath = `raw/${user.uid}/${jobId}.pdf`;
+        await uploadWithProgress(storagePath, uploadFile, (progress) => {
+          setUploadProgress(progress);
+        });
+        jobData.rawPdfUrl = storagePath;
+      }
+
+      await setDoc(jobRef, jobData);
 
       setJobStatus('queued');
 
+      // Delete draft after successful submission
+      if (isTextSubmission) {
+        await deleteDraft(selectedAssignmentId);
+        setSubmissionText('');
+        setDraftLoaded(false);
+      }
 
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setSelectedAssignmentId(null); // Clear selection on success
+      setSelectedAssignmentId(null);
 
     } catch (err) {
       console.error("Job submission failed:", err);
@@ -651,14 +751,61 @@ function StudentClassDetail() {
                           )}
 
                           <div className="space-y-3">
-                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submission</Label>
-                            <FileDropzone
-                              accept=".pdf"
-                              maxSize={20}
-                              file={uploadFile}
-                              onFileSelect={(f) => setUploadFile(f)}
-                              disabled={isSubmittingJob}
-                            />
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submission</Label>
+                              {(assignment.submissionType === 'both') && (
+                                <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSubmissionMode('pdf')}
+                                    className={cn('px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors', submissionMode === 'pdf' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                                  >
+                                    PDF Upload
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSubmissionMode('text')}
+                                    className={cn('px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors', submissionMode === 'text' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                                  >
+                                    Text Entry
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {submissionMode === 'text' ? (
+                              <div className="space-y-2">
+                                <RichMathEditor
+                                  initialContent={submissionText}
+                                  onUpdate={handleTextUpdate}
+                                  placeholder="Type your answer here... Use the equation button for math."
+                                />
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span className="flex items-center gap-1">
+                                    {draftSaving ? (
+                                      <><Loader2 className="h-3 w-3 animate-spin" /> Saving draft...</>
+                                    ) : draftLoaded ? (
+                                      <><Save className="h-3 w-3" /> Draft saved</>
+                                    ) : null}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => saveDraft(submissionText)}
+                                    className="text-primary hover:underline font-medium"
+                                  >
+                                    Save Draft
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <FileDropzone
+                                accept=".pdf"
+                                maxSize={20}
+                                file={uploadFile}
+                                onFileSelect={(f) => setUploadFile(f)}
+                                disabled={isSubmittingJob}
+                              />
+                            )}
                           </div>
 
                           {submitError && (
@@ -680,7 +827,7 @@ function StudentClassDetail() {
 
                           <Button
                             onClick={handleJobSubmit}
-                            disabled={isSubmittingJob || !uploadFile}
+                            disabled={isSubmittingJob || (submissionMode === 'pdf' ? !uploadFile : !submissionText.trim())}
                             className="w-full rounded-xl py-6 text-base font-semibold shadow-md active:scale-[0.98] transition-all"
                           >
                             {isSubmittingJob ? (

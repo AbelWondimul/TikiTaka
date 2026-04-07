@@ -491,6 +491,17 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Submission Drafts (student text submission drafts)
+    // ─────────────────────────────────────────
+
+    match /submissionDrafts/{draftId} {
+      // Only the student who owns the draft can read/write
+      allow read, write: if isAuthenticated() && resource == null || resource.data.studentId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.studentId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────
     // Backstop Deny — catches all unmatched document paths
     // ─────────────────────────────────────────
 

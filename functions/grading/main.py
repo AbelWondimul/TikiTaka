@@ -116,7 +116,90 @@ def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Documen
         class_id = job_data.get('classId')
         rubric = job_data.get('rubric')
         raw_pdf_path = job_data.get('rawPdfUrl')
-        
+        submission_type = job_data.get('submissionType', 'pdf')
+        submission_text = job_data.get('submissionText', '')
+
+        # ── TEXT SUBMISSION BRANCH ──
+        if submission_type == 'text' and submission_text:
+            job_ref.update({'progress': 10, 'progress_text': 'Processing text submission...'})
+
+            # Fetch Knowledge Base Text
+            kb_text = ""
+            kb_query = _get_db().collection('knowledgeBase').where('classId', '==', class_id).stream()
+            for kb_doc in kb_query:
+                kb_data_doc = kb_doc.to_dict()
+                kb_path = kb_data_doc.get('storageUrl')
+                kb_blob = _get_bucket().blob(kb_path)
+                if kb_blob.exists():
+                    kb_bytes = kb_blob.download_as_bytes()
+                    try:
+                        import fitz
+                        kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
+                        for page in kb_pdf:
+                            kb_text += page.get_text() + "\n"
+                        kb_pdf.close()
+                    except Exception as e:
+                        print(f"Failed to parse KB doc: {e}")
+
+            job_ref.update({'progress': 30, 'progress_text': 'Grading text response...'})
+
+            # Build prompt for text submission
+            rubric_json = json.dumps(rubric, indent=2) if isinstance(rubric, dict) else str(rubric)
+            prompt = f"""You are an expert academic grader. Grade the following student text submission against the rubric.
+
+RUBRIC:
+{rubric_json}
+
+{"KNOWLEDGE BASE CONTEXT:" + chr(10) + kb_text[:8000] if kb_text else ""}
+
+STUDENT SUBMISSION (text):
+{submission_text[:15000]}
+
+Return your response as a JSON object with:
+- "score": "X/Y" where X is earned points and Y is total
+- "earnedPoints": number
+- "totalPoints": number
+- "overallFeedback": string (2-3 sentences)
+- "questions": array of objects, each with:
+  - "questionNumber": string
+  - "status": "correct" | "partial" | "wrong"
+  - "pointsEarned": number
+  - "pointsPossible": number
+  - "feedback": string (1-2 sentences)
+  - "confidence": "high" | "medium" | "low"
+
+Respond ONLY with the JSON, no markdown."""
+
+            model = _get_genai_model()
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            if response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+            grading_result = json.loads(response_text)
+
+            job_ref.update({'progress': 80, 'progress_text': 'Processing results...'})
+
+            graded_questions = grading_result.get('questions', [])
+            final_score = grading_result.get('earnedPoints', 0)
+            total_points = grading_result.get('totalPoints', 0)
+            overall_feedback = grading_result.get('overallFeedback', '')
+
+            job_ref.update({
+                'status': 'complete',
+                'resultPdfUrl': None,
+                'score': final_score,
+                'totalPoints': total_points,
+                'feedback': overall_feedback,
+                'gradedQuestions': graded_questions,
+                'hasEdgeCases': False,
+                'progress': 100,
+                'progress_text': 'Grading complete.',
+                'completedAt': firestore.SERVER_TIMESTAMP
+            })
+            return
+
+        # ── PDF SUBMISSION BRANCH ──
         # 1. Wait for raw PDF to appear in Storage (Retry loop)
         blob = _get_bucket().blob(raw_pdf_path)
         retries = 0

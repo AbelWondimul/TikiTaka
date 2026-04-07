@@ -111,6 +111,7 @@ function TeacherClassPage() {
   const [uploadAssignmentFile, setUploadAssignmentFile] = useState(null);
   const [uploadAssignmentError, setUploadAssignmentError] = useState(null);
   const [uploadAssignmentProgress, setUploadAssignmentProgress] = useState(0);
+  const [uploadSubmissionType, setUploadSubmissionType] = useState('pdf'); // 'pdf' | 'text' | 'both'
   const assignmentFileInputRef = useRef(null);
 
   // Confusion Heatmap State
@@ -547,6 +548,7 @@ function TeacherClassPage() {
         rubric: rubricData,
         totalPoints: rubricData.totalPoints || 0,
         topic: rubricData.topic || '',
+        submissionType: uploadSubmissionType,
         dueDate: uploadAssignmentDueDate ? new Date(uploadAssignmentDueDate) : null,
         createdAt: serverTimestamp()
       });
@@ -556,6 +558,7 @@ function TeacherClassPage() {
       setUploadAssignmentDueDate('');
       setUploadAssignmentFile(null);
       setUploadAssignmentProgress(0);
+      setUploadSubmissionType('pdf');
       if (assignmentFileInputRef.current) {
         assignmentFileInputRef.current.value = "";
       }
@@ -1526,6 +1529,37 @@ function TeacherClassPage() {
                       disabled={isAssignmentUploading}
                       className="cursor-pointer file:cursor-pointer file:text-foreground file:font-medium file:border-0 file:bg-transparent file:mr-4"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Student Submission Type</Label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'pdf', label: 'PDF Only' },
+                        { value: 'text', label: 'Text Only' },
+                        { value: 'both', label: 'PDF or Text' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setUploadSubmissionType(opt.value)}
+                          disabled={isAssignmentUploading}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                            uploadSubmissionType === opt.value
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {uploadSubmissionType === 'text' ? 'Students will type their answers with rich text and equation support.' :
+                       uploadSubmissionType === 'both' ? 'Students can choose to upload a PDF or type their answers.' :
+                       'Students must upload a PDF file.'}
+                    </p>
                   </div>
 
                   {uploadAssignmentError && (

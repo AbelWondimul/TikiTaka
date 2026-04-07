@@ -11,8 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Upload, MessageSquare } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Upload, MessageSquare, FileType } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import dynamic from 'next/dynamic';
+
+const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 import { serverTimestamp } from 'firebase/firestore';
 
 function SubmissionDetail() {
@@ -272,6 +275,23 @@ function SubmissionDetail() {
           </div>
 
           <div className="lg:col-span-8 space-y-6">
+            {/* Text submission display */}
+            {job.submissionType === 'text' && job.submissionText && (
+              <Card className="rounded-3xl shadow-lg">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <FileType className="h-4 w-4 text-primary" />
+                    Your Text Submission
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-xl p-4 bg-muted/10 max-h-[600px] overflow-y-auto">
+                    <MathRenderer content={job.submissionText} />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {downloadUrl && (
               <div className="relative border rounded-3xl overflow-hidden h-[750px] w-full bg-muted/20 shadow-lg group">
                  {iframeLoading && (
