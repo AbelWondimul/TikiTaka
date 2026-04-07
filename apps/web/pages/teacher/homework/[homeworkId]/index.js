@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { 
-  doc, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs 
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  addDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 
 import { db } from '@/firebase';
@@ -19,7 +22,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, FileText, CheckCircle, HelpCircle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Loader2, ArrowLeft, FileText, CheckCircle, HelpCircle, ArrowUpDown, Download } from 'lucide-react';
 
 function AssignmentSubmissionsPage() {
   const router = useRouter();
@@ -41,6 +48,19 @@ function AssignmentSubmissionsPage() {
   const [submissions, setSubmissions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Sort state
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  // Inline grade editing state
+  const [editingGradeId, setEditingGradeId] = useState(null);
+  const [editGradeValue, setEditGradeValue] = useState('');
+
+  // Fill grades dialog state
+  const [isFillGradesOpen, setIsFillGradesOpen] = useState(false);
+  const [fillGradeValue, setFillGradeValue] = useState('');
+  const [fillOverwrite, setFillOverwrite] = useState(false);
+  const [isFilling, setIsFilling] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -134,8 +154,88 @@ function AssignmentSubmissionsPage() {
     );
   }
 
+  // Sort students by last name
+  const sortedStudents = [...students].sort((a, b) => {
+    const lastA = (a.displayName || '').trim().split(' ').pop().toLowerCase();
+    const lastB = (b.displayName || '').trim().split(' ').pop().toLowerCase();
+    return sortOrder === 'asc' ? lastA.localeCompare(lastB) : lastB.localeCompare(lastA);
+  });
+
   const getSubmissionForStudent = (studentId) => {
     return submissions.find(s => s.studentId === studentId);
+  };
+
+  // Inline grade edit handler
+  const handleGradeEdit = async (submissionId, newScore) => {
+    const parsed = Number(newScore);
+    if (isNaN(parsed)) { setEditingGradeId(null); return; }
+    try {
+      await updateDoc(doc(db, 'gradingJobs', submissionId), { score: parsed });
+      setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, score: parsed } : s));
+    } catch (err) {
+      console.error('Error updating grade:', err);
+    }
+    setEditingGradeId(null);
+  };
+
+  // Fill grades handler
+  const handleFillGrades = async () => {
+    const score = Number(fillGradeValue);
+    if (isNaN(score)) return;
+    setIsFilling(true);
+    try {
+      for (const student of students) {
+        const submission = getSubmissionForStudent(student.uid);
+        if (submission) {
+          // Has submission — update score if overwrite enabled or no existing score
+          if (fillOverwrite || submission.score === null || submission.score === undefined) {
+            await updateDoc(doc(db, 'gradingJobs', submission.id), { score });
+            setSubmissions(prev => prev.map(s => s.id === submission.id ? { ...s, score } : s));
+          }
+        } else {
+          // No submission — create a grading job stub
+          const newJob = await addDoc(collection(db, 'gradingJobs'), {
+            assignmentId: homeworkId,
+            classId: assignment.classId,
+            studentId: student.uid,
+            teacherId: user.uid,
+            status: 'complete',
+            score,
+            createdAt: serverTimestamp(),
+          });
+          setSubmissions(prev => [...prev, { id: newJob.id, assignmentId: homeworkId, classId: assignment.classId, studentId: student.uid, teacherId: user.uid, status: 'complete', score }]);
+        }
+      }
+      setIsFillGradesOpen(false);
+      setFillGradeValue('');
+      setFillOverwrite(false);
+    } catch (err) {
+      console.error('Error filling grades:', err);
+    } finally {
+      setIsFilling(false);
+    }
+  };
+
+  // Per-assignment CSV export
+  const handleDownloadCSV = () => {
+    const rows = [['Student Name', 'Email', 'Status', 'Score']];
+    for (const student of sortedStudents) {
+      const submission = getSubmissionForStudent(student.uid);
+      rows.push([
+        student.displayName || '',
+        student.email || '',
+        submission ? submission.status : 'Not Submitted',
+        submission && submission.score !== null && submission.score !== undefined ? String(submission.score) : '',
+      ]);
+    }
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(assignment?.title || 'assignment').replace(/[^a-z0-9]/gi, '_')}_grades.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const statusLabel = (status) => {
@@ -171,6 +271,14 @@ function AssignmentSubmissionsPage() {
                 Points: <span className="font-medium text-foreground ml-1">{assignment.totalPoints || 0}</span>
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setIsFillGradesOpen(true)}>
+                Fill Grades
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={handleDownloadCSV}>
+                <Download className="h-4 w-4 mr-1" /> CSV
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -193,7 +301,13 @@ function AssignmentSubmissionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Student</TableHead>
+                    <TableHead>
+                          <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                            Student
+                            <ArrowUpDown className="h-3.5 w-3.5" />
+                            <span className="text-[10px] text-muted-foreground font-normal">({sortOrder === 'asc' ? 'A-Z' : 'Z-A'})</span>
+                          </button>
+                        </TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Score</TableHead>
@@ -201,7 +315,7 @@ function AssignmentSubmissionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {students.map((student) => {
+                  {sortedStudents.map((student) => {
                     const submission = getSubmissionForStudent(student.uid);
                     const hasSubmitted = !!submission;
                     
@@ -221,9 +335,34 @@ function AssignmentSubmissionsPage() {
                         <TableCell>
                           {submission ? statusLabel(submission.status) : <Badge variant="outline">Not Submitted</Badge>}
                         </TableCell>
-                        <TableCell>
-                          {submission && submission.score !== null ? (
-                            <span className="font-semibold">{submission.score}</span>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {submission && submission.status === 'complete' && editingGradeId === submission.id ? (
+                            <Input
+                              type="number"
+                              className="w-20 h-7 text-sm"
+                              autoFocus
+                              value={editGradeValue}
+                              onChange={(e) => setEditGradeValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleGradeEdit(submission.id, editGradeValue);
+                                if (e.key === 'Escape') setEditingGradeId(null);
+                              }}
+                              onBlur={() => handleGradeEdit(submission.id, editGradeValue)}
+                            />
+                          ) : submission && submission.score !== null && submission.score !== undefined ? (
+                            <span
+                              className="font-semibold cursor-pointer hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (submission.status === 'complete') {
+                                  setEditingGradeId(submission.id);
+                                  setEditGradeValue(String(submission.score));
+                                }
+                              }}
+                              title={submission.status === 'complete' ? 'Click to edit' : ''}
+                            >
+                              {submission.score}
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">N/A</span>
                           )}
@@ -247,6 +386,41 @@ function AssignmentSubmissionsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Fill Grades Dialog */}
+      <Dialog open={isFillGradesOpen} onOpenChange={setIsFillGradesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Fill Grades</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="fill-grade-value">Default Grade</Label>
+              <Input
+                id="fill-grade-value"
+                type="number"
+                placeholder="e.g. 0"
+                value={fillGradeValue}
+                onChange={(e) => setFillGradeValue(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="fill-overwrite" className="text-sm">Overwrite existing grades</Label>
+              <Switch
+                id="fill-overwrite"
+                checked={fillOverwrite}
+                onCheckedChange={setFillOverwrite}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFillGradesOpen(false)}>Cancel</Button>
+            <Button onClick={handleFillGrades} disabled={isFilling || fillGradeValue === ''}>
+              {isFilling ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Applying...</> : 'Apply'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

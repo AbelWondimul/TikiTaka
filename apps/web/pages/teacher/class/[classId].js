@@ -42,7 +42,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
@@ -621,6 +621,80 @@ function TeacherClassPage() {
     }
   };
 
+  // --- Download Grades CSV State ---
+  const [isDownloadingGrades, setIsDownloadingGrades] = useState(false);
+
+  // --- Download Course Grades CSV Handler ---
+  const handleDownloadCourseGrades = async () => {
+    if (!classId || !classData) return;
+    setIsDownloadingGrades(true);
+    try {
+      // Fetch all assignments for this class
+      const assignQ = query(collection(db, 'assignments'), where('classId', '==', classId));
+      const assignSnap = await getDocs(assignQ);
+      const allAssignments = assignSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Fetch all grading jobs for this class
+      const jobsQ = query(collection(db, 'gradingJobs'), where('classId', '==', classId));
+      const jobsSnap = await getDocs(jobsQ);
+      const allJobs = jobsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Build lookup: studentId -> assignmentId -> job
+      const jobMap = {};
+      for (const job of allJobs) {
+        if (!jobMap[job.studentId]) jobMap[job.studentId] = {};
+        jobMap[job.studentId][job.assignmentId] = job;
+      }
+
+      const dropLowest = classData.dropLowest || false;
+
+      // CSV header
+      const headers = ['Student Name', 'Email', ...allAssignments.map(a => a.title || 'Untitled'), 'Overall Grade'];
+      const rows = [headers];
+
+      for (const student of enrolledStudents) {
+        const row = [student.displayName || '', student.email || ''];
+        const percentages = [];
+        for (const assign of allAssignments) {
+          const job = jobMap[student.uid]?.[assign.id];
+          const score = job?.score;
+          const total = assign.totalPoints || 100;
+          if (score !== null && score !== undefined) {
+            row.push(String(score));
+            percentages.push((score / total) * 100);
+          } else {
+            row.push('');
+          }
+        }
+
+        let overall = '';
+        if (percentages.length > 0) {
+          let pcts = [...percentages];
+          if (dropLowest && pcts.length > 1) {
+            pcts.sort((a, b) => a - b);
+            pcts = pcts.slice(1);
+          }
+          overall = (pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1);
+        }
+        row.push(overall);
+        rows.push(row);
+      }
+
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(classData.name || 'class').replace(/[^a-z0-9]/gi, '_')}_grades.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading grades:', err);
+    } finally {
+      setIsDownloadingGrades(false);
+    }
+  };
+
   // --- Delete Assignment Handler ---
   const [deleteAssignmentId, setDeleteAssignmentId] = useState(null);
 
@@ -884,6 +958,20 @@ function TeacherClassPage() {
                   }}
                 />
               </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-muted-foreground">Drop Lowest Score:</span>
+                <Switch
+                  checked={classData.dropLowest || false}
+                  onCheckedChange={async (checked) => {
+                    try {
+                      await updateDoc(doc(db, 'classes', classId), { dropLowest: checked });
+                      setClassData(prev => ({ ...prev, dropLowest: checked }));
+                    } catch (err) {
+                      console.error('Error updating drop lowest:', err);
+                    }
+                  }}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {isClassOwner && (
@@ -905,6 +993,10 @@ function TeacherClassPage() {
               </Button>
               <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/forum`)}>
                 <ClipboardList className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Forum</span>
+              </Button>
+              <Button variant="outline" className="rounded-xl" onClick={handleDownloadCourseGrades} disabled={isDownloadingGrades}>
+                {isDownloadingGrades ? <Loader2 className="h-4 w-4 animate-spin sm:mr-2" /> : <Download className="h-4 w-4 sm:mr-2" />}
+                <span className="hidden sm:inline">Grades CSV</span>
               </Button>
             </div>
           </div>
