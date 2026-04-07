@@ -115,9 +115,10 @@ function SubmissionDetail() {
     setIsUpdating(true);
     try {
       const jobRef = doc(db, 'gradingJobs', job.id);
-      // Student can update their status to 'disputed'
       await updateDoc(jobRef, {
-        status: 'disputed'
+        status: 'disputed',
+        appealReason: 'Re-grade requested',
+        appealedAt: serverTimestamp(),
       });
     } catch (err) {
       console.error("Failed to request re-grade:", err);
