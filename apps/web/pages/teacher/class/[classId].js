@@ -736,8 +736,37 @@ function TeacherClassPage() {
         }
       }
 
+      // Attendance grade settings
+      const attendanceGradeEnabled = classData.attendanceGradeEnabled || false;
+      const attendanceGradeWeight = classData.attendanceGradeWeight ?? 10;
+      const attendanceFreebieAbs = classData.attendanceFreebieAbsences ?? 3;
+      const attendanceGradeCap = classData.attendanceGradeCap || false;
+      const attendanceCapMinPct = classData.attendanceCapMinPct ?? 80;
+      const attendanceCapMaxGrade = classData.attendanceCapMaxGrade ?? 80;
+
+      // If attendance grading is enabled but we haven't fetched attendance yet, fetch it
+      if (attendanceGradeEnabled && Object.keys(studentAttendanceMap).length === 0) {
+        const attQ = query(collection(db, 'attendance'), where('classId', '==', classId));
+        const attSnap = await getDocs(attQ);
+        const attRecords = attSnap.docs.map(d => d.data());
+        const totalSessions = attRecords.length;
+        if (totalSessions > 0) {
+          for (const student of enrolledStudents) {
+            let absences = 0;
+            for (const rec of attRecords) {
+              const status = rec.records?.[student.uid];
+              if (status && status !== 'present') absences++;
+            }
+            const effectiveAbs = Math.max(0, absences - attendanceFreebieAbs);
+            studentAttendanceMap[student.uid] = ((totalSessions - effectiveAbs) / totalSessions) * 100;
+          }
+        }
+      }
+
       // CSV header
-      const headers = ['Student Name', 'Email', ...allAssignments.map(a => a.title || 'Untitled'), 'Overall Grade'];
+      const headers = ['Student Name', 'Email', ...allAssignments.map(a => a.title || 'Untitled')];
+      if (attendanceGradeEnabled) headers.push('Attendance %');
+      headers.push('Overall Grade');
       const rows = [headers];
 
       for (const student of enrolledStudents) {
@@ -755,6 +784,9 @@ function TeacherClassPage() {
           }
         }
 
+        const studentAttPct = studentAttendanceMap[student.uid] ?? 100;
+        if (attendanceGradeEnabled) row.push(studentAttPct.toFixed(1));
+
         let overall = '';
         if (percentages.length > 0) {
           let pcts = [...percentages];
@@ -766,7 +798,20 @@ function TeacherClassPage() {
             pcts.sort((a, b) => a - b);
             pcts = pcts.slice(1);
           }
-          overall = (pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1);
+          let assignmentAvg = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+
+          if (attendanceGradeEnabled) {
+            // Weighted blend: assignments weight + attendance weight
+            const assignWeight = 100 - attendanceGradeWeight;
+            overall = ((assignmentAvg * assignWeight / 100) + (studentAttPct * attendanceGradeWeight / 100)).toFixed(1);
+          } else {
+            overall = assignmentAvg.toFixed(1);
+          }
+
+          // Apply grade cap for low attendance
+          if (attendanceGradeEnabled && attendanceGradeCap && studentAttPct < attendanceCapMinPct) {
+            overall = String(Math.min(parseFloat(overall), attendanceCapMaxGrade).toFixed(1));
+          }
         }
         row.push(overall);
         rows.push(row);
@@ -1122,6 +1167,105 @@ function TeacherClassPage() {
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* Attendance as grade component */}
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-muted-foreground">Attendance as Grade Component:</span>
+                <Switch
+                  checked={classData.attendanceGradeEnabled || false}
+                  onCheckedChange={async (checked) => {
+                    try {
+                      await updateDoc(doc(db, 'classes', classId), { attendanceGradeEnabled: checked });
+                      setClassData(prev => ({ ...prev, attendanceGradeEnabled: checked }));
+                    } catch (err) { console.error('Error:', err); }
+                  }}
+                />
+              </div>
+              {classData.attendanceGradeEnabled && (
+                <div className="ml-4 mt-2 space-y-2 border-l-2 border-muted pl-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Attendance Weight %:</span>
+                    <Input
+                      type="number" min="1" max="100"
+                      className="w-16 h-7 text-center text-sm rounded-lg"
+                      value={classData.attendanceGradeWeight ?? 10}
+                      onChange={async (e) => {
+                        const val = Math.max(1, Math.min(100, parseInt(e.target.value) || 10));
+                        try {
+                          await updateDoc(doc(db, 'classes', classId), { attendanceGradeWeight: val });
+                          setClassData(prev => ({ ...prev, attendanceGradeWeight: val }));
+                        } catch (err) { console.error('Error:', err); }
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Freebie Absences:</span>
+                    <Input
+                      type="number" min="0" max="50"
+                      className="w-16 h-7 text-center text-sm rounded-lg"
+                      value={classData.attendanceFreebieAbsences ?? 3}
+                      onChange={async (e) => {
+                        const val = Math.max(0, Math.min(50, parseInt(e.target.value) || 0));
+                        try {
+                          await updateDoc(doc(db, 'classes', classId), { attendanceFreebieAbsences: val });
+                          setClassData(prev => ({ ...prev, attendanceFreebieAbsences: val }));
+                        } catch (err) { console.error('Error:', err); }
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Cap Grade for Low Attendance:</span>
+                    <Switch
+                      checked={classData.attendanceGradeCap || false}
+                      onCheckedChange={async (checked) => {
+                        try {
+                          await updateDoc(doc(db, 'classes', classId), { attendanceGradeCap: checked });
+                          setClassData(prev => ({ ...prev, attendanceGradeCap: checked }));
+                        } catch (err) { console.error('Error:', err); }
+                      }}
+                    />
+                  </div>
+                  {classData.attendanceGradeCap && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Min Attendance % Required:</span>
+                        <Input
+                          type="number" min="0" max="100"
+                          className="w-16 h-7 text-center text-sm rounded-lg"
+                          value={classData.attendanceCapMinPct ?? 80}
+                          onChange={async (e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 80));
+                            try {
+                              await updateDoc(doc(db, 'classes', classId), { attendanceCapMinPct: val });
+                              setClassData(prev => ({ ...prev, attendanceCapMinPct: val }));
+                            } catch (err) { console.error('Error:', err); }
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Max Grade Cap %:</span>
+                        <Input
+                          type="number" min="0" max="100"
+                          className="w-16 h-7 text-center text-sm rounded-lg"
+                          value={classData.attendanceCapMaxGrade ?? 80}
+                          onChange={async (e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 80));
+                            try {
+                              await updateDoc(doc(db, 'classes', classId), { attendanceCapMaxGrade: val });
+                              setClassData(prev => ({ ...prev, attendanceCapMaxGrade: val }));
+                            } catch (err) { console.error('Error:', err); }
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    {classData.attendanceGradeCap
+                      ? `Students below ${classData.attendanceCapMinPct ?? 80}% attendance (after ${classData.attendanceFreebieAbsences ?? 3} freebies) will have their overall grade capped at ${classData.attendanceCapMaxGrade ?? 80}%.`
+                      : `Attendance counts as ${classData.attendanceGradeWeight ?? 10}% of the overall grade. ${classData.attendanceFreebieAbsences ?? 3} freebie absences allowed.`}
+                  </p>
                 </div>
               )}
             </div>
