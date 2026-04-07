@@ -209,15 +209,20 @@ Respond ONLY with the JSON, no markdown."""
             return
 
         # ── PDF SUBMISSION BRANCH ──
-        # 1. Wait for raw PDF to appear in Storage (Retry loop)
+        if not raw_pdf_path:
+            raise Exception("No PDF path provided and not a text submission.")
+
+        # 1. Wait for raw PDF to appear in Storage (Retry loop — up to 60s)
         blob = _get_bucket().blob(raw_pdf_path)
         retries = 0
-        while not blob.exists() and retries < 3:
+        max_retries = 12
+        while not blob.exists() and retries < max_retries:
             time.sleep(5)
             retries += 1
-            
+            job_ref.update({'progress_text': f'Waiting for upload to complete... ({retries * 5}s)'})
+
         if not blob.exists():
-            raise Exception("Raw PDF not found in Storage after retries.")
+            raise Exception(f"Raw PDF not found in Storage after {max_retries * 5}s. Path: {raw_pdf_path}")
             
         import fitz  # PyMuPDF — lazy import
         from PIL import Image, ImageDraw  # lazy import
