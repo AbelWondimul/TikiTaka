@@ -1278,6 +1278,9 @@ function TeacherClassPage() {
                 <Megaphone className="h-4 w-4 mr-2" /> <span className="hidden sm:inline">Announce</span>
               </Button>
               )}
+              <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/gradebook`)}>
+                <Award className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Gradebook</span>
+              </Button>
               <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/modules`)}>
                 <FileText className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Modules</span>
               </Button>

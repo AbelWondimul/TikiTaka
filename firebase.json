@@ -45,6 +45,10 @@
         "destination": "/teacher/class/[classId]/forum.html"
       },
       {
+        "source": "/teacher/class/:classId/gradebook",
+        "destination": "/teacher/class/[classId]/gradebook.html"
+      },
+      {
         "source": "/student/class/:classId/modules",
         "destination": "/student/class/[classId]/modules.html"
       },
