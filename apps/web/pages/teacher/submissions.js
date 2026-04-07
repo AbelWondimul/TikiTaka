@@ -58,6 +58,14 @@ function TeacherSubmissions() {
   const [gradingJobs, setGradingJobs] = useState([]);
   const [studentProfiles, setStudentProfiles] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Read status filter from URL query param
+  useEffect(() => {
+    if (router.isReady && router.query.status) {
+      setStatusFilter(router.query.status);
+    }
+  }, [router.isReady, router.query.status]);
 
   useEffect(() => {
     if (!user) return;
@@ -248,32 +256,54 @@ function TeacherSubmissions() {
               ))}
             </SelectContent>
           </Select>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px] rounded-xl h-9 text-sm">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="pending">Pending / Processing</SelectItem>
+              <SelectItem value="graded">Graded</SelectItem>
+              <SelectItem value="missing">Missing</SelectItem>
+              <SelectItem value="not_submitted">Not Submitted</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Stats row */}
         {!isLoading && studentRows.length > 0 && (
           <div className="flex flex-wrap gap-3">
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 px-3 py-1 text-xs font-semibold">
+            <Badge variant="outline" className={cn("px-3 py-1 text-xs font-semibold cursor-pointer transition-colors", statusFilter === 'graded' ? 'bg-green-200 text-green-900 border-green-400' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100')} onClick={() => setStatusFilter(statusFilter === 'graded' ? 'all' : 'graded')}>
               {gradedCount} Graded
             </Badge>
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 px-3 py-1 text-xs font-semibold">
+            <Badge variant="outline" className={cn("px-3 py-1 text-xs font-semibold cursor-pointer transition-colors", statusFilter === 'pending' ? 'bg-blue-200 text-blue-900 border-blue-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100')} onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}>
               {pendingCount} Processing
             </Badge>
-            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 px-3 py-1 text-xs font-semibold">
+            <Badge variant="outline" className={cn("px-3 py-1 text-xs font-semibold cursor-pointer transition-colors", statusFilter === 'not_submitted' ? 'bg-slate-200 text-slate-900 border-slate-400' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100')} onClick={() => setStatusFilter(statusFilter === 'not_submitted' ? 'all' : 'not_submitted')}>
               {notSubmittedCount} Not Submitted
             </Badge>
-            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 px-3 py-1 text-xs font-semibold">
+            <Badge variant="outline" className={cn("px-3 py-1 text-xs font-semibold cursor-pointer transition-colors", statusFilter === 'missing' ? 'bg-red-200 text-red-900 border-red-400' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100')} onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')}>
               {missingCount} Missing
             </Badge>
           </div>
         )}
 
+        {/* Apply status filter */}
+        {(() => {
+          const displayRows = statusFilter === 'all' ? studentRows : studentRows.filter(r => {
+            if (statusFilter === 'pending') return r.status === 'processing' || r.status === 'error';
+            return r.status === statusFilter;
+          });
+
+          return <>
         {/* Table */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : studentRows.length === 0 ? (
+        ) : displayRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed rounded-2xl bg-muted/5">
             <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
             <p className="text-base font-medium">No submissions found</p>
@@ -297,7 +327,7 @@ function TeacherSubmissions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {studentRows.map((row) => {
+                  {displayRows.map((row) => {
                     const sc = statusConfig[row.status] || statusConfig.not_submitted;
                     const StatusIcon = sc.icon;
 
@@ -379,6 +409,8 @@ function TeacherSubmissions() {
             </div>
           </Card>
         )}
+        </>;
+        })()}
       </div>
     </TeacherLayout>
   );

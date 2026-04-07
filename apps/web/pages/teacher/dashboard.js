@@ -250,7 +250,10 @@ function TeacherDashboard() {
               <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{totalStudents}</span>
             </div>
           </div>
-          <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
+          <div
+            className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => router.push('/teacher/submissions?status=pending')}
+          >
             <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-2">Pending</span>
             <div className="flex items-baseline justify-between">
               <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{displayPendingCount}</span>
