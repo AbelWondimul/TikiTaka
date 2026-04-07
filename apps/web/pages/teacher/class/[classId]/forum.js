@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
 import {
   collection,
   query,
@@ -39,6 +40,8 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { getRelativeTime } from '@/lib/dateUtils';
+
+const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 
 function TeacherForum() {
   const router = useRouter();
@@ -256,7 +259,7 @@ function TeacherForum() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{post.content}</p>
+                      <MathRenderer content={post.content} />
                       <div className="flex items-center gap-3 mt-2">
                         <span className="text-[10px] text-muted-foreground">{getRelativeTime(post.createdAt)}</span>
                         <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">Anonymous</Badge>
@@ -325,7 +328,7 @@ function TeacherForum() {
                               )}
                               <span className="text-[10px] text-muted-foreground">{getRelativeTime(reply.createdAt)}</span>
                             </div>
-                            <p className="text-sm text-foreground/90 leading-relaxed mt-0.5 whitespace-pre-line">{reply.content}</p>
+                            <MathRenderer content={reply.content} className="text-sm" />
                           </div>
                         </div>
                       ))}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -43,6 +44,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
 
 // Quiz form schema moved inside components for dynamic validation
 
@@ -1968,16 +1971,13 @@ function TeacherClassPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <Textarea
-              placeholder="Type your announcement here..."
-              value={announcementText}
-              onChange={(e) => setAnnouncementText(e.target.value)}
-              className="min-h-[120px] rounded-xl resize-none"
-              maxLength={500}
+            <RichMathEditor
+              onUpdate={(html) => setAnnouncementText(html)}
+              placeholder="Write your announcement..."
+              maxLength={2000}
             />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{classData?.studentIds?.length || 0} student{(classData?.studentIds?.length || 0) !== 1 ? 's' : ''} will be notified</span>
-              <span>{announcementText.length}/500</span>
             </div>
           </div>
           <DialogFooter>

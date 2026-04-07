@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -7,6 +8,8 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Bell, MessageSquare, FileText, Clock, AlertCircle, UserMinus, Megaphone } from 'lucide-react';
 import Link from 'next/link';
+
+const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 
 export default function NotificationDropdown({ variant = 'default' }) {
   const { user, role } = useAuth();
@@ -358,7 +361,7 @@ export default function NotificationDropdown({ variant = 'default' }) {
                           <span className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{notif.subtitle}</p>
+                      <MathRenderer content={notif.subtitle} plainText className="text-xs text-muted-foreground mt-0.5 truncate" />
                       {notif.time && (
                         <p className="text-[11px] text-muted-foreground/60 mt-1">{getRelativeTime(notif.time)}</p>
                       )}

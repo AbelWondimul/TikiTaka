@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
 import {
   collection,
   query,
@@ -22,13 +23,15 @@ import Header from '@/components/layout/Header';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, MessageCircleQuestion, ThumbsUp, Send, ShieldAlert, Lock, Reply, GraduationCap } from 'lucide-react';
 import { getRelativeTime } from '@/lib/dateUtils';
+
+const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
+const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 
 function StudentForum() {
   const router = useRouter();
@@ -210,15 +213,14 @@ function StudentForum() {
               </Alert>
             ) : (
               <Card className="p-4 rounded-2xl border-border/50">
-                <Textarea
-                  placeholder="Ask a question anonymously... Your name will not be shown."
-                  value={newPost}
-                  onChange={(e) => setNewPost(e.target.value)}
-                  className="min-h-[80px] rounded-xl border-border/50 resize-none mb-3"
-                  maxLength={1000}
-                />
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">{newPost.length}/1000</span>
+                <div className="mb-3">
+                  <RichMathEditor
+                    onUpdate={(html) => setNewPost(html)}
+                    placeholder="Ask a question anonymously... Your name will not be shown."
+                    maxLength={1000}
+                  />
+                </div>
+                <div className="flex items-center justify-end">
                   <Button onClick={handleSubmitPost} disabled={isSubmitting || !newPost.trim()} className="rounded-xl" size="sm">
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
                     Post Anonymously
@@ -255,7 +257,7 @@ function StudentForum() {
                         </button>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{post.content}</p>
+                          <MathRenderer content={post.content} />
                           <div className="flex items-center gap-3 mt-2">
                             <span className="text-[10px] text-muted-foreground">{getRelativeTime(post.createdAt)}</span>
                             <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">Anonymous</Badge>
@@ -298,7 +300,7 @@ function StudentForum() {
                                   )}
                                   <span className="text-[10px] text-muted-foreground">{getRelativeTime(reply.createdAt)}</span>
                                 </div>
-                                <p className="text-sm text-foreground/90 leading-relaxed mt-0.5 whitespace-pre-line">{reply.content}</p>
+                                <MathRenderer content={reply.content} className="text-sm" />
                               </div>
                             </div>
                           ))}

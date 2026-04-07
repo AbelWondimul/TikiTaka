@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
+import 'katex/dist/katex.min.css';
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/ui/toast-provider";
 
