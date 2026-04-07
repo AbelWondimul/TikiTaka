@@ -155,6 +155,15 @@ RUBRIC:
 STUDENT SUBMISSION (text):
 {submission_text[:15000]}
 
+IMPORTANT MATH GRADING RULES:
+- When grading mathematical expressions, check for SYMBOLIC EQUIVALENCE, not just string matching.
+- x^2+2x+1 and (x+1)^2 are equivalent and both correct.
+- 2/4 and 1/2 are equivalent.
+- sin^2(x) + cos^2(x) and 1 are equivalent.
+- Accept any valid algebraic simplification or rearrangement as correct.
+- For LaTeX expressions, interpret the math content, not the markup syntax.
+- If the student's answer is mathematically equivalent to the expected answer, mark it as correct regardless of form.
+
 Return your response as a JSON object with:
 - "score": "X/Y" where X is earned points and Y is total
 - "earnedPoints": number

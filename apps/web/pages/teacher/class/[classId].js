@@ -708,6 +708,33 @@ function TeacherClassPage() {
       }
 
       const dropLowest = classData.dropLowest || false;
+      const dropLowestAttendanceLinked = classData.dropLowestAttendanceLinked || false;
+      const dropLowestMinAttendance = classData.dropLowestMinAttendance ?? 90;
+      const dropLowestFreebieAbsences = classData.dropLowestFreebieAbsences ?? 3;
+
+      // Fetch attendance data if attendance-linked drop lowest is enabled
+      let studentAttendanceMap = {};
+      if (dropLowest && dropLowestAttendanceLinked) {
+        const attendanceQ = query(collection(db, 'attendance'), where('classId', '==', classId));
+        const attendanceSnap = await getDocs(attendanceQ);
+        const attendanceRecords = attendanceSnap.docs.map(d => d.data());
+
+        const totalSessions = attendanceRecords.length;
+        if (totalSessions > 0) {
+          for (const student of enrolledStudents) {
+            let absences = 0;
+            for (const record of attendanceRecords) {
+              const studentStatus = record.students?.[student.uid];
+              if (studentStatus && studentStatus !== 'present') {
+                absences++;
+              }
+            }
+            const effectiveAbsences = Math.max(0, absences - dropLowestFreebieAbsences);
+            const attendancePct = ((totalSessions - effectiveAbsences) / totalSessions) * 100;
+            studentAttendanceMap[student.uid] = attendancePct;
+          }
+        }
+      }
 
       // CSV header
       const headers = ['Student Name', 'Email', ...allAssignments.map(a => a.title || 'Untitled'), 'Overall Grade'];
@@ -731,7 +758,11 @@ function TeacherClassPage() {
         let overall = '';
         if (percentages.length > 0) {
           let pcts = [...percentages];
-          if (dropLowest && pcts.length > 1) {
+          const canDropLowest = dropLowest && pcts.length > 1 && (
+            !dropLowestAttendanceLinked ||
+            (studentAttendanceMap[student.uid] !== undefined && studentAttendanceMap[student.uid] >= dropLowestMinAttendance)
+          );
+          if (canDropLowest) {
             pcts.sort((a, b) => a - b);
             pcts = pcts.slice(1);
           }
@@ -1033,6 +1064,66 @@ function TeacherClassPage() {
                   }}
                 />
               </div>
+              {classData.dropLowest && (
+                <div className="ml-4 mt-2 space-y-2 border-l-2 border-muted pl-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Link to Attendance:</span>
+                    <Switch
+                      checked={classData.dropLowestAttendanceLinked || false}
+                      onCheckedChange={async (checked) => {
+                        try {
+                          await updateDoc(doc(db, 'classes', classId), { dropLowestAttendanceLinked: checked });
+                          setClassData(prev => ({ ...prev, dropLowestAttendanceLinked: checked }));
+                        } catch (err) {
+                          console.error('Error updating attendance link:', err);
+                        }
+                      }}
+                    />
+                  </div>
+                  {classData.dropLowestAttendanceLinked && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Min Attendance %:</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-16 h-7 text-center text-sm rounded-lg"
+                          value={classData.dropLowestMinAttendance ?? 90}
+                          onChange={async (e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                            try {
+                              await updateDoc(doc(db, 'classes', classId), { dropLowestMinAttendance: val });
+                              setClassData(prev => ({ ...prev, dropLowestMinAttendance: val }));
+                            } catch (err) {
+                              console.error('Error updating min attendance:', err);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Freebie Absences:</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="50"
+                          className="w-16 h-7 text-center text-sm rounded-lg"
+                          value={classData.dropLowestFreebieAbsences ?? 3}
+                          onChange={async (e) => {
+                            const val = Math.max(0, Math.min(50, parseInt(e.target.value) || 0));
+                            try {
+                              await updateDoc(doc(db, 'classes', classId), { dropLowestFreebieAbsences: val });
+                              setClassData(prev => ({ ...prev, dropLowestFreebieAbsences: val }));
+                            } catch (err) {
+                              console.error('Error updating freebie absences:', err);
+                            }
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {isClassOwner && (

@@ -78,6 +78,33 @@ function TeacherMessages() {
   const unsubscribeRef = useRef(null);
   const convUnsubRef = useRef(null);
 
+  // Load email draft from localStorage on mount
+  useEffect(() => {
+    try {
+      const draft = JSON.parse(localStorage.getItem('tikitaka-email-draft') || '{}');
+      if (draft.subject) setEmailSubject(draft.subject);
+      if (draft.body) setEmailBody(draft.body);
+      if (draft.classId) setEmailClassId(draft.classId);
+      if (draft.recipientType) setEmailRecipientType(draft.recipientType);
+    } catch {}
+  }, []);
+
+  // Auto-save email draft
+  const emailDraftTimerRef = useRef(null);
+  useEffect(() => {
+    if (emailDraftTimerRef.current) clearTimeout(emailDraftTimerRef.current);
+    emailDraftTimerRef.current = setTimeout(() => {
+      if (emailSubject || emailBody) {
+        localStorage.setItem('tikitaka-email-draft', JSON.stringify({
+          subject: emailSubject,
+          body: emailBody,
+          classId: emailClassId,
+          recipientType: emailRecipientType,
+        }));
+      }
+    }, 1000);
+  }, [emailSubject, emailBody, emailClassId, emailRecipientType]);
+
   // Real-time conversation list
   useEffect(() => {
     if (!user) return;
@@ -505,6 +532,7 @@ function TeacherMessages() {
         sentAt: serverTimestamp(),
       });
 
+      localStorage.removeItem('tikitaka-email-draft');
       setEmailSuccess('Email saved successfully! It will be sent when the email Cloud Function is deployed.');
       setEmailSubject('');
       setEmailBody('');
@@ -918,6 +946,9 @@ function TeacherMessages() {
                       className="rounded-xl min-h-[160px] resize-y"
                     />
                   </div>
+
+                  {/* Draft indicator */}
+                  <span className="text-[10px] text-muted-foreground">{(emailSubject || emailBody) ? 'Draft auto-saved' : ''}</span>
 
                   {/* Send button */}
                   <Button
