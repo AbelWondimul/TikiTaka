@@ -484,65 +484,36 @@ Example structure (NO other text/markdown outside this array):
                         # Position: place mark just to the right of the answer
                         y_c = y_pct * p['height']
                         answer_end_x = x_pct * p['width']
-                        # Offset mark 15px to the right of where the answer ends
-                        mark_x = min(answer_end_x + 15, p['width'] * 0.85)
+                        mark_x = min(answer_end_x + 10, p['width'] * 0.88)
 
                         is_full = (pts == pos_pts)
-                        feedback = q.get('feedback', '')
-                        color_red = (0.8, 0, 0)
-                        color_green = (0, 0.55, 0)
-                        width_th = 2.5
-                        mark_size = 10
-
-                        mark_color = color_green if is_full else color_red
+                        color_red = (0.85, 0, 0)
+                        color_green = (0, 0.6, 0)
+                        s = 8  # mark size
 
                         if is_full:
-                            # Small checkmark next to answer
-                            pdf_page.draw_line(fitz.Point(mark_x, y_c + 2), fitz.Point(mark_x + mark_size * 0.4, y_c + mark_size), color=mark_color, width=width_th)
-                            pdf_page.draw_line(fitz.Point(mark_x + mark_size * 0.4, y_c + mark_size), fitz.Point(mark_x + mark_size, y_c - 4), color=mark_color, width=width_th)
-                            text_to_draw = ""
+                            # Green checkmark only
+                            pdf_page.draw_line(fitz.Point(mark_x, y_c + 2), fitz.Point(mark_x + s * 0.4, y_c + s), color=color_green, width=2)
+                            pdf_page.draw_line(fitz.Point(mark_x + s * 0.4, y_c + s), fitz.Point(mark_x + s, y_c - 3), color=color_green, width=2)
                         else:
+                            # Red cross
+                            pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + s, y_c + s), color=color_red, width=2)
+                            pdf_page.draw_line(fitz.Point(mark_x, y_c + s), fitz.Point(mark_x + s, y_c), color=color_red, width=2)
+
+                            # Small point deduction label: "-1" next to the cross
                             lost_pts = pos_pts - pts
-                            if status == 'wrong':
-                                # Small cross next to answer
-                                pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + mark_size, y_c + mark_size), color=color_red, width=width_th)
-                                pdf_page.draw_line(fitz.Point(mark_x, y_c + mark_size), fitz.Point(mark_x + mark_size, y_c), color=color_red, width=width_th)
-
-                            # Build compact annotation text
-                            if feedback:
-                                clean_fb = feedback.strip().lstrip('✓✗◯±').strip()
-                                if len(clean_fb) > 30:
-                                    clean_fb = clean_fb[:27] + '...'
-                                text_to_draw = f"(-{lost_pts}): {clean_fb}"
-                            else:
-                                text_to_draw = f"(-{lost_pts} pts)"
-
-                            if status == 'partial':
-                                text_to_draw = f"± {text_to_draw}"
-
-                        if text_to_draw:
-                            import os
-                            font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
-
-                            # Place text right after the mark, constrained to stay compact
-                            text_x = mark_x + mark_size + 5
-                            # Don't let text box extend past page width
-                            text_x1 = min(text_x + 220, p['width'] - 10)
-                            rect_box = fitz.Rect(
-                                text_x,
-                                y_c - 8,
-                                text_x1,
-                                y_c + 35  # Tight height — single line
-                            )
-
-                            pdf_page.insert_textbox(
-                                rect_box,
-                                text_to_draw,
-                                fontsize=12,
-                                color=color_red,
-                                fontfile=font_path if os.path.exists(font_path) else None,
-                                fontname="f0"
-                            )
+                            if lost_pts > 0:
+                                import os
+                                font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
+                                label = f"-{lost_pts}"
+                                rect_box = fitz.Rect(mark_x + s + 3, y_c - 4, mark_x + s + 35, y_c + s + 8)
+                                pdf_page.insert_textbox(
+                                    rect_box, label, fontsize=10, color=color_red,
+                                    fontfile=font_path if os.path.exists(font_path) else None,
+                                    fontname="f0"
+                                )
+                        # Detailed feedback is available in the digital question breakdown,
+                        # not drawn on the PDF to avoid overlapping on dense worksheets.
 
 
 

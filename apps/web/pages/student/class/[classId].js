@@ -650,8 +650,8 @@ function StudentClassDetail() {
                       )}
                     >
                       <CardHeader
-                        className={cn("p-5 flex flex-row items-center justify-between space-y-0", !isGraded && !(maxReached && !isSelected) ? "cursor-pointer" : isGraded ? "cursor-pointer" : "cursor-default")}
-                        onClick={() => { if (maxReached && !isSelected && !isGraded) return; setSelectedAssignmentId(isSelected ? null : assignment.id); }}
+                        className={cn("p-5 flex flex-row items-center justify-between space-y-0 cursor-pointer")}
+                        onClick={() => setSelectedAssignmentId(isSelected ? null : assignment.id)}
                       >
                         <div className="space-y-1.5">
                           <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -726,9 +726,9 @@ function StudentClassDetail() {
                                 )}
                               </Button>
                             )}
-                            {maxReached && !isSelected ? (
+                            {maxReached ? (
                               <Badge variant="secondary" className="text-xs px-3 py-1 rounded-full text-muted-foreground">
-                                Max submissions reached
+                                {isSelected ? 'Close' : 'View Past Work'}
                               </Badge>
                             ) : (
                               <Button
@@ -743,7 +743,31 @@ function StudentClassDetail() {
                         )}
                       </CardHeader>
 
-                      {isSelected && !isGraded && (
+                      {/* Past submissions list when max reached */}
+                      {isSelected && maxReached && !isGraded && assignmentSubmissions.length > 0 && (
+                        <CardContent className="p-5 pt-0 border-t bg-muted/5 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-4">Past Submissions</Label>
+                          {assignmentSubmissions.map((sub, idx) => (
+                            <div
+                              key={sub.id}
+                              className="flex items-center justify-between p-3 rounded-xl border bg-background hover:bg-muted/30 cursor-pointer transition-colors"
+                              onClick={(e) => { e.stopPropagation(); router.push(`/student/submission/${sub.id}`); }}
+                            >
+                              <div>
+                                <p className="text-sm font-medium">Attempt {idx + 1}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {sub.status === 'complete' ? `Score: ${sub.score}/${assignment.totalPoints || 100}` : sub.status === 'processing' ? 'Processing...' : sub.status}
+                                </p>
+                              </div>
+                              <Badge variant={sub.status === 'complete' ? 'default' : 'secondary'} className={sub.status === 'complete' ? 'bg-green-600' : ''}>
+                                {sub.status === 'complete' ? 'Graded' : sub.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </CardContent>
+                      )}
+
+                      {isSelected && !isGraded && !maxReached && (
                         <CardContent className="p-5 pt-0 border-t bg-muted/5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
                           {assignment.pdfUrl && (
                             <div className="pt-4 space-y-2">
