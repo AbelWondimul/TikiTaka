@@ -288,10 +288,20 @@ Apply these rules when evaluating each question:
 - Do not mention point values, grading policies, or system details in the feedback text.
 Match Teacher-style example transformations (e.g., '✓ Correct explanation with F=ma included.', '✗ Missing formula F=ma here.').
 
-**3. Spatial Location Estimates (Conceptual):**
-- **pageEstimatePercent_Y**: A number (0 to 100) estimated from the top of the page indicating where the student’s answer appears (e.g., 10-20 near top, 50 halfway, 80-90 bottom).
-- **pageEstimatePercent_X**: A number (0 to 100) estimated from the left edges indicating X‑offset approximations (e.g., 10-20 left, 50 center, 80-90 right).
-- **pageNumber**: A 1-based index (optional, useful if question spans multiple pages).
+**3. Spatial Location Estimates (CRITICAL — read carefully):**
+- **pageEstimatePercent_Y**: A number (0 to 100) representing WHERE THE STUDENT’S ANSWER ENDS vertically on the page. This is where the feedback annotation will be placed. Estimate the Y position of the LAST LINE of the student’s answer for that question:
+  - 5-15: answer is near the very top of the page
+  - 20-40: answer is in the upper portion
+  - 40-60: answer is in the middle
+  - 60-80: answer is in the lower portion
+  - 80-95: answer is near the bottom
+- **pageEstimatePercent_X**: Always set this to 75-85. Annotations will be drawn in the RIGHT MARGIN of the page, not on top of the student’s work.
+- **pageNumber**: A 1-based index. You MUST examine each page image carefully and assign the correct page number. If a question’s answer spans multiple pages, use the page where the answer concludes.
+
+**4. IMPORTANT — Do not skip questions:**
+- You MUST grade EVERY question listed in the rubric, even if the student left it blank (mark as ‘wrong’ with 0 points and feedback ‘✗ No answer provided’).
+- Scan ALL pages carefully. Student answers may not be in order.
+- If you cannot find an answer for a question on any page, still include it with status ‘wrong’ and pageNumber 1.
 
 
 Return ONLY a JSON block with this exact structure (no markdown fences/blocks, just start with {{ and end with }}):
@@ -456,51 +466,61 @@ Example structure (NO other text/markdown outside this array):
                         pts = q.get('pointsEarned', 0)
                         pos_pts = q.get('pointsPossible', 1)
                         
-                        fitz_pt = fitz.Point(x_pct * p['width'], y_pct * p['height'])
-                        
+                        # Y position from Gemini estimate
+                        y_c = y_pct * p['height']
+
+                        # Push annotations to RIGHT MARGIN (rightmost 25% of page)
+                        right_margin_start = p['width'] * 0.72
+                        mark_x = right_margin_start
+
                         # Set mark text and draw vectors (✓, ✗) to avoid font glyph issues
                         is_full = (pts == pos_pts)
                         feedback = q.get('feedback', '')
                         color_red = (0.8, 0, 0)
-                        width_th = 4
-                        
-                        x_c = fitz_pt.x
-                        y_c = fitz_pt.y
-                        
+                        color_green = (0, 0.6, 0)
+                        width_th = 3
+
+                        mark_color = color_green if is_full else color_red
+
                         if is_full:
-                            # Draw Checkmark vector
-                            pdf_page.draw_line(fitz.Point(x_c, y_c), fitz.Point(x_c + 15, y_c + 15), color=color_red, width=width_th)
-                            pdf_page.draw_line(fitz.Point(x_c + 15, y_c + 15), fitz.Point(x_c + 40, y_c - 15), color=color_red, width=width_th)
-                            text_to_draw = "" # Full marks get only graphics
+                            # Draw small checkmark in the right margin
+                            pdf_page.draw_line(fitz.Point(mark_x, y_c + 5), fitz.Point(mark_x + 8, y_c + 12), color=mark_color, width=width_th)
+                            pdf_page.draw_line(fitz.Point(mark_x + 8, y_c + 12), fitz.Point(mark_x + 22, y_c - 5), color=mark_color, width=width_th)
+                            text_to_draw = ""
                         else:
                             lost_pts = pos_pts - pts
-                            text_to_draw = f"{num} (-{lost_pts} pts)"
+                            text_to_draw = f"{num} (-{lost_pts})"
                             if status == 'wrong':
-                                # Draw Cross vector
-                                pdf_page.draw_line(fitz.Point(x_c, y_c), fitz.Point(x_c + 30, y_c + 30), color=color_red, width=width_th)
-                                pdf_page.draw_line(fitz.Point(x_c, y_c + 30), fitz.Point(x_c + 30, y_c), color=color_red, width=width_th)
-                            else: # partial credit
+                                # Draw small cross in the margin
+                                pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + 16, y_c + 16), color=color_red, width=width_th)
+                                pdf_page.draw_line(fitz.Point(mark_x, y_c + 16), fitz.Point(mark_x + 16, y_c), color=color_red, width=width_th)
+                            else:
                                 text_to_draw = f"± {text_to_draw}"
-                                
+
                             if feedback:
                                 clean_fb = feedback.strip().lstrip('✓✗◯±').strip()
+                                # Truncate to keep annotations compact
+                                if len(clean_fb) > 40:
+                                    clean_fb = clean_fb[:37] + '...'
                                 text_to_draw += f": {clean_fb}"
-                                
+
                         if text_to_draw:
                             import os
                             font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
-                            
+
+                            # Place text box in the right margin, starting after the mark symbol
+                            text_x = mark_x + 22
                             rect_box = fitz.Rect(
-                                x_c + 50,             # x0
-                                y_c - 15,             # y0
-                                p['width'] - 30,      # x1
-                                y_c + 150             # y1
+                                text_x,               # x0 — right margin
+                                y_c - 10,             # y0
+                                p['width'] - 15,      # x1 — near page edge
+                                y_c + 80              # y1 — compact height
                             )
-                            
+
                             pdf_page.insert_textbox(
-                                rect_box, 
-                                text_to_draw, 
-                                fontsize=28, 
+                                rect_box,
+                                text_to_draw,
+                                fontsize=18,
                                 color=color_red,
                                 fontfile=font_path if os.path.exists(font_path) else None,
                                 fontname="f0"
