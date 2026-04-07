@@ -17,6 +17,7 @@ import {
   deleteDoc,
   orderBy,
   serverTimestamp,
+  Timestamp,
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
@@ -42,7 +43,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock, Download } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock, Download, CalendarClock, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
@@ -112,6 +113,7 @@ function TeacherClassPage() {
   const [uploadAssignmentError, setUploadAssignmentError] = useState(null);
   const [uploadAssignmentProgress, setUploadAssignmentProgress] = useState(0);
   const [uploadSubmissionType, setUploadSubmissionType] = useState('pdf'); // 'pdf' | 'text' | 'both'
+  const [uploadMaxSubmissions, setUploadMaxSubmissions] = useState(1);
   const assignmentFileInputRef = useRef(null);
 
   // Confusion Heatmap State
@@ -390,6 +392,9 @@ function TeacherClassPage() {
         // 7. Fetch Assignments
         fetchAssignments();
 
+        // 8. Fetch Scheduled Announcements
+        fetchScheduledAnnouncements();
+
       } catch (err) {
         console.error("Error fetching class details:", err);
         setError("Failed to load class data.");
@@ -549,6 +554,7 @@ function TeacherClassPage() {
         totalPoints: rubricData.totalPoints || 0,
         topic: rubricData.topic || '',
         submissionType: uploadSubmissionType,
+        maxSubmissions: uploadMaxSubmissions,
         dueDate: uploadAssignmentDueDate ? new Date(uploadAssignmentDueDate) : null,
         createdAt: serverTimestamp()
       });
@@ -559,6 +565,7 @@ function TeacherClassPage() {
       setUploadAssignmentFile(null);
       setUploadAssignmentProgress(0);
       setUploadSubmissionType('pdf');
+      setUploadMaxSubmissions(1);
       if (assignmentFileInputRef.current) {
         assignmentFileInputRef.current.value = "";
       }
@@ -577,29 +584,83 @@ function TeacherClassPage() {
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
   const [announcementText, setAnnouncementText] = useState('');
   const [isSendingAnnouncement, setIsSendingAnnouncement] = useState(false);
+  const [scheduleAnnouncement, setScheduleAnnouncement] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [scheduledAnnouncements, setScheduledAnnouncements] = useState([]);
+  const [isCancellingScheduled, setIsCancellingScheduled] = useState(null);
+
+  const fetchScheduledAnnouncements = async () => {
+    if (!classId || !user) return;
+    try {
+      const q = query(
+        collection(db, 'scheduledAnnouncements'),
+        where('classId', '==', classId),
+        where('teacherId', '==', user.uid),
+        where('status', '==', 'scheduled'),
+        orderBy('scheduledFor')
+      );
+      const snap = await getDocs(q);
+      setScheduledAnnouncements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.error('Error fetching scheduled announcements:', err);
+    }
+  };
+
+  const handleCancelScheduledAnnouncement = async (announcementId) => {
+    setIsCancellingScheduled(announcementId);
+    try {
+      await deleteDoc(doc(db, 'scheduledAnnouncements', announcementId));
+      setScheduledAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+    } catch (err) {
+      console.error('Error cancelling scheduled announcement:', err);
+    } finally {
+      setIsCancellingScheduled(null);
+    }
+  };
 
   const handleSendAnnouncement = async () => {
     if (!announcementText.trim() || !classData) return;
     setIsSendingAnnouncement(true);
     try {
-      const studentIds = classData.studentIds || [];
-      const batch = [];
-      for (const studentId of studentIds) {
-        batch.push(
-          addDoc(collection(db, 'notifications'), {
-            senderId: user.uid,
-            recipientId: studentId,
-            notifType: 'announcement',
-            title: `Announcement: ${classData.name}`,
-            message: announcementText.trim(),
-            href: `/student/class/${classId}`,
-            read: false,
-            createdAt: serverTimestamp(),
-          })
-        );
+      if (scheduleAnnouncement && scheduleDate && scheduleTime) {
+        // Save to scheduledAnnouncements collection
+        const scheduledFor = Timestamp.fromDate(new Date(`${scheduleDate}T${scheduleTime}`));
+        await addDoc(collection(db, 'scheduledAnnouncements'), {
+          teacherId: user.uid,
+          classId: classId,
+          className: classData.name,
+          message: announcementText.trim(),
+          scheduledFor: scheduledFor,
+          studentIds: classData.studentIds || [],
+          status: 'scheduled',
+          createdAt: serverTimestamp()
+        });
+        fetchScheduledAnnouncements();
+      } else {
+        // Send immediately
+        const studentIds = classData.studentIds || [];
+        const batch = [];
+        for (const studentId of studentIds) {
+          batch.push(
+            addDoc(collection(db, 'notifications'), {
+              senderId: user.uid,
+              recipientId: studentId,
+              notifType: 'announcement',
+              title: `Announcement: ${classData.name}`,
+              message: announcementText.trim(),
+              href: `/student/class/${classId}`,
+              read: false,
+              createdAt: serverTimestamp(),
+            })
+          );
+        }
+        await Promise.all(batch);
       }
-      await Promise.all(batch);
       setAnnouncementText('');
+      setScheduleAnnouncement(false);
+      setScheduleDate('');
+      setScheduleTime('');
       setIsAnnouncementOpen(false);
     } catch (err) {
       console.error('Error sending announcement:', err);
@@ -1654,6 +1715,22 @@ function TeacherClassPage() {
                     </p>
                   </div>
 
+                  <div className="space-y-2">
+                    <Label>Max Submissions</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={uploadMaxSubmissions}
+                      onChange={(e) => setUploadMaxSubmissions(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                      disabled={isAssignmentUploading}
+                      className="w-24"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      How many times a student can submit this assignment (1-10).
+                    </p>
+                  </div>
+
                   {uploadAssignmentError && (
                     <Alert variant="destructive" className="py-2 px-3">
                       <AlertDescription className="text-xs">{uploadAssignmentError}</AlertDescription>
@@ -2105,6 +2182,53 @@ function TeacherClassPage() {
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{classData?.studentIds?.length || 0} student{(classData?.studentIds?.length || 0) !== 1 ? 's' : ''} will be notified</span>
             </div>
+
+            {/* Schedule for later */}
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  Schedule for later
+                </Label>
+                <Switch checked={scheduleAnnouncement} onCheckedChange={(val) => { setScheduleAnnouncement(val); if (!val) { setScheduleDate(''); setScheduleTime(''); } }} />
+              </div>
+              {scheduleAnnouncement && (
+                <div className="flex gap-2">
+                  <Input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="flex-1" />
+                  <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="flex-1" />
+                </div>
+              )}
+            </div>
+
+            {/* Pending scheduled announcements */}
+            {scheduledAnnouncements.length > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Scheduled</Label>
+                {scheduledAnnouncements.map((sa) => {
+                  const scheduledDate = sa.scheduledFor?.toDate ? sa.scheduledFor.toDate() : new Date(sa.scheduledFor);
+                  return (
+                    <div key={sa.id} className="flex items-center justify-between p-2 rounded-lg border bg-muted/30 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-foreground" dangerouslySetInnerHTML={{ __html: sa.message }} />
+                        <p className="text-muted-foreground mt-0.5">
+                          <CalendarClock className="h-3 w-3 inline mr-1" />
+                          {scheduledDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 ml-2 shrink-0"
+                        onClick={() => handleCancelScheduledAnnouncement(sa.id)}
+                        disabled={isCancellingScheduled === sa.id}
+                      >
+                        {isCancellingScheduled === sa.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAnnouncementOpen(false)} disabled={isSendingAnnouncement} className="rounded-xl">
@@ -2112,10 +2236,16 @@ function TeacherClassPage() {
             </Button>
             <Button
               onClick={handleSendAnnouncement}
-              disabled={isSendingAnnouncement || !announcementText.trim()}
+              disabled={isSendingAnnouncement || !announcementText.trim() || (scheduleAnnouncement && (!scheduleDate || !scheduleTime))}
               className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
             >
-              {isSendingAnnouncement ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending...</> : <><Megaphone className="h-4 w-4 mr-2" /> Send to All</>}
+              {isSendingAnnouncement ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {scheduleAnnouncement ? 'Scheduling...' : 'Sending...'}</>
+              ) : scheduleAnnouncement && scheduleDate && scheduleTime ? (
+                <><CalendarClock className="h-4 w-4 mr-2" /> Schedule Announcement</>
+              ) : (
+                <><Megaphone className="h-4 w-4 mr-2" /> Send to All</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

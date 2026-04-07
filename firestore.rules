@@ -512,6 +512,17 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Scheduled Announcements
+    // ─────────────────────────────────────────
+
+    match /scheduledAnnouncements/{announcementId} {
+      allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
+      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow update: if isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────
     // Backstop Deny — catches all unmatched document paths
     // ─────────────────────────────────────────
 

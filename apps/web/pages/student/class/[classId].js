@@ -617,7 +617,11 @@ function StudentClassDetail() {
                 const remainingPasses = extensionTotal - extensionUsed;
 
                 const renderAssignmentCard = (assignment) => {
-                  const hasSubmitted = submissions.some(s => s.assignmentId === assignment.id);
+                  const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignment.id);
+                  const submissionCount = assignmentSubmissions.length;
+                  const maxSubs = assignment.maxSubmissions || 1;
+                  const hasSubmitted = submissionCount > 0;
+                  const maxReached = submissionCount >= maxSubs;
                   const gradedSub = submissions.find(s => s.assignmentId === assignment.id && s.status === 'complete');
                   const isGraded = !!gradedSub;
                   const originalDueDate = assignment.dueDate?.toDate ? assignment.dueDate.toDate() : (assignment.dueDate ? new Date(assignment.dueDate) : null);
@@ -646,8 +650,8 @@ function StudentClassDetail() {
                       )}
                     >
                       <CardHeader
-                        className="p-5 flex flex-row items-center justify-between space-y-0 cursor-pointer"
-                        onClick={() => setSelectedAssignmentId(isSelected ? null : assignment.id)}
+                        className={cn("p-5 flex flex-row items-center justify-between space-y-0", !isGraded && !(maxReached && !isSelected) ? "cursor-pointer" : isGraded ? "cursor-pointer" : "cursor-default")}
+                        onClick={() => { if (maxReached && !isSelected && !isGraded) return; setSelectedAssignmentId(isSelected ? null : assignment.id); }}
                       >
                         <div className="space-y-1.5">
                           <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -683,6 +687,14 @@ function StudentClassDetail() {
                                 </span>
                               </>
                             )}
+                            {maxSubs > 1 && (
+                              <>
+                                <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+                                <span className={maxReached ? 'text-red-500 font-medium' : ''}>
+                                  {submissionCount}/{maxSubs} submissions used
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                         {isGraded ? (
@@ -714,13 +726,19 @@ function StudentClassDetail() {
                                 )}
                               </Button>
                             )}
-                            <Button
-                              variant={isSelected ? "secondary" : "outline"}
-                              size="sm"
-                              className={cn("rounded-full px-5 transition-all", !isSelected && "group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary")}
-                            >
-                              {isSelected ? 'Cancel' : hasSubmitted ? 'Resubmit' : 'Open'}
-                            </Button>
+                            {maxReached && !isSelected ? (
+                              <Badge variant="secondary" className="text-xs px-3 py-1 rounded-full text-muted-foreground">
+                                Max submissions reached
+                              </Badge>
+                            ) : (
+                              <Button
+                                variant={isSelected ? "secondary" : "outline"}
+                                size="sm"
+                                className={cn("rounded-full px-5 transition-all", !isSelected && "group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary")}
+                              >
+                                {isSelected ? 'Cancel' : hasSubmitted ? 'Resubmit' : 'Open'}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </CardHeader>
