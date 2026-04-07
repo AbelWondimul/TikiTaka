@@ -289,17 +289,27 @@ Apply these rules when evaluating each question:
 Match Teacher-style example transformations (e.g., '✓ Correct explanation with F=ma included.', '✗ Missing formula F=ma here.').
 
 **3. Spatial Location Estimates (CRITICAL — read carefully):**
-- **pageEstimatePercent_Y**: A number (0 to 100) representing WHERE THE STUDENT’S ANSWER ENDS vertically on the page. This is where the feedback annotation will be placed. Estimate the Y position of the LAST LINE of the student’s answer for that question:
-  - 5-15: answer is near the very top of the page
-  - 20-40: answer is in the upper portion
-  - 40-60: answer is in the middle
-  - 60-80: answer is in the lower portion
-  - 80-95: answer is near the bottom
-- **pageEstimatePercent_X**: Always set this to 75-85. Annotations will be drawn in the RIGHT MARGIN of the page, not on top of the student’s work.
-- **pageNumber**: A 1-based index. You MUST examine each page image carefully and assign the correct page number. If a question’s answer spans multiple pages, use the page where the answer concludes.
+- **pageEstimatePercent_Y**: A number (0 to 100) representing the vertical center of the student’s answer on the page. Be PRECISE:
+  - Look at where the student actually wrote their answer
+  - Estimate as a percentage from the top of the page to the center of their handwriting
+  - For multi-column worksheets, each question has its own Y position
+- **pageEstimatePercent_X**: A number (0 to 100) representing where the student’s written answer ENDS horizontally. This tells us where to place the annotation mark:
+  - For answers on the LEFT side of a two-column layout: typically 25-40
+  - For answers on the RIGHT side of a two-column layout: typically 65-80
+  - For full-width answers: typically 40-60
+  - The annotation will be placed JUST TO THE RIGHT of this position
+- **pageNumber**: A 1-based index. Examine each page image carefully and assign the correct page.
 
-**4. IMPORTANT — Do not skip questions:**
-- You MUST grade EVERY question listed in the rubric, even if the student left it blank (mark as ‘wrong’ with 0 points and feedback ‘✗ No answer provided’).
+**4. Feedback length rules:**
+- For CORRECT answers: feedback should be EMPTY or at most 3 words (e.g., "✓ Correct")
+- For WRONG/PARTIAL answers: feedback must be at most 8 words. Be extremely brief. Examples:
+  - "✗ Should be 18, not 9"
+  - "✗ Wrong product"
+  - "± Missing units"
+- NEVER write full sentences. NEVER repeat the question. NEVER say "Incorrect product; X multiplied by Y is Z" — just say "✗ Should be Z"
+
+**5. IMPORTANT — Do not skip questions:**
+- You MUST grade EVERY question listed in the rubric, even if the student left it blank (mark as ‘wrong’ with 0 points and feedback ‘✗ No answer’).
 - Scan ALL pages carefully. Student answers may not be in order.
 - If you cannot find an answer for a question on any page, still include it with status ‘wrong’ and pageNumber 1.
 
@@ -466,61 +476,64 @@ Example structure (NO other text/markdown outside this array):
                         pts = q.get('pointsEarned', 0)
                         pos_pts = q.get('pointsPossible', 1)
                         
-                        # Y position from Gemini estimate
+                        # Position: place mark just to the right of the answer
                         y_c = y_pct * p['height']
+                        answer_end_x = x_pct * p['width']
+                        # Offset mark 15px to the right of where the answer ends
+                        mark_x = min(answer_end_x + 15, p['width'] * 0.85)
 
-                        # Push annotations to RIGHT MARGIN (rightmost 25% of page)
-                        right_margin_start = p['width'] * 0.72
-                        mark_x = right_margin_start
-
-                        # Set mark text and draw vectors (✓, ✗) to avoid font glyph issues
                         is_full = (pts == pos_pts)
                         feedback = q.get('feedback', '')
                         color_red = (0.8, 0, 0)
-                        color_green = (0, 0.6, 0)
-                        width_th = 3
+                        color_green = (0, 0.55, 0)
+                        width_th = 2.5
+                        mark_size = 10
 
                         mark_color = color_green if is_full else color_red
 
                         if is_full:
-                            # Draw small checkmark in the right margin
-                            pdf_page.draw_line(fitz.Point(mark_x, y_c + 5), fitz.Point(mark_x + 8, y_c + 12), color=mark_color, width=width_th)
-                            pdf_page.draw_line(fitz.Point(mark_x + 8, y_c + 12), fitz.Point(mark_x + 22, y_c - 5), color=mark_color, width=width_th)
+                            # Small checkmark next to answer
+                            pdf_page.draw_line(fitz.Point(mark_x, y_c + 2), fitz.Point(mark_x + mark_size * 0.4, y_c + mark_size), color=mark_color, width=width_th)
+                            pdf_page.draw_line(fitz.Point(mark_x + mark_size * 0.4, y_c + mark_size), fitz.Point(mark_x + mark_size, y_c - 4), color=mark_color, width=width_th)
                             text_to_draw = ""
                         else:
                             lost_pts = pos_pts - pts
-                            text_to_draw = f"{num} (-{lost_pts})"
                             if status == 'wrong':
-                                # Draw small cross in the margin
-                                pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + 16, y_c + 16), color=color_red, width=width_th)
-                                pdf_page.draw_line(fitz.Point(mark_x, y_c + 16), fitz.Point(mark_x + 16, y_c), color=color_red, width=width_th)
-                            else:
-                                text_to_draw = f"± {text_to_draw}"
+                                # Small cross next to answer
+                                pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + mark_size, y_c + mark_size), color=color_red, width=width_th)
+                                pdf_page.draw_line(fitz.Point(mark_x, y_c + mark_size), fitz.Point(mark_x + mark_size, y_c), color=color_red, width=width_th)
 
+                            # Build compact annotation text
                             if feedback:
                                 clean_fb = feedback.strip().lstrip('✓✗◯±').strip()
-                                # Truncate to keep annotations compact
-                                if len(clean_fb) > 40:
-                                    clean_fb = clean_fb[:37] + '...'
-                                text_to_draw += f": {clean_fb}"
+                                if len(clean_fb) > 30:
+                                    clean_fb = clean_fb[:27] + '...'
+                                text_to_draw = f"(-{lost_pts}): {clean_fb}"
+                            else:
+                                text_to_draw = f"(-{lost_pts} pts)"
+
+                            if status == 'partial':
+                                text_to_draw = f"± {text_to_draw}"
 
                         if text_to_draw:
                             import os
                             font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
 
-                            # Place text box in the right margin, starting after the mark symbol
-                            text_x = mark_x + 22
+                            # Place text right after the mark, constrained to stay compact
+                            text_x = mark_x + mark_size + 5
+                            # Don't let text box extend past page width
+                            text_x1 = min(text_x + 220, p['width'] - 10)
                             rect_box = fitz.Rect(
-                                text_x,               # x0 — right margin
-                                y_c - 10,             # y0
-                                p['width'] - 15,      # x1 — near page edge
-                                y_c + 80              # y1 — compact height
+                                text_x,
+                                y_c - 8,
+                                text_x1,
+                                y_c + 35  # Tight height — single line
                             )
 
                             pdf_page.insert_textbox(
                                 rect_box,
                                 text_to_draw,
-                                fontsize=18,
+                                fontsize=12,
                                 color=color_red,
                                 fontfile=font_path if os.path.exists(font_path) else None,
                                 fontname="f0"
