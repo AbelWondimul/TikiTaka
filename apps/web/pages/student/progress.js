@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, TrendingUp, CheckCircle2, BookOpen, Award, Flame, Target } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2, TrendingUp, CheckCircle2, BookOpen, Award, Flame, Target, ChevronDown } from 'lucide-react';
 import StudentNavTabs from '@/components/layout/StudentNavTabs';
 
 function StudentProgress() {
@@ -18,6 +19,9 @@ function StudentProgress() {
   const [classes, setClasses] = useState([]);
   const [classGrades, setClassGrades] = useState({});
   const [totalStats, setTotalStats] = useState({ gpa: null, completed: 0, total: 0, quizAvg: null, streak: 0 });
+  const [allJobs, setAllJobs] = useState([]);
+  const [allAssignments, setAllAssignments] = useState([]);
+  const [expandedClassId, setExpandedClassId] = useState(null);
 
   useEffect(() => { if (user) fetchData(); }, [user]);
 
@@ -50,6 +54,9 @@ function StudentProgress() {
       const quizQ = query(collection(db, 'quizAttempts'), where('studentId', '==', user.uid));
       const quizSnap = await getDocs(quizQ);
       const quizzes = []; quizSnap.forEach(d => quizzes.push(d.data()));
+
+      setAllJobs(jobs);
+      setAllAssignments(allAssignments);
 
       // Per-class grades
       const grades = {};
@@ -173,19 +180,66 @@ function StudentProgress() {
                 classes.map(c => {
                   const g = classGrades[c.id] || {};
                   const completionPct = g.total > 0 ? Math.round((g.completed / g.total) * 100) : 0;
+                  const isExpanded = expandedClassId === c.id;
+                  const classAssigns = allAssignments.filter(a => a.classId === c.id);
+                  const classJobs = allJobs.filter(j => j.classId === c.id);
+
                   return (
-                    <Card key={c.id} className="rounded-2xl p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="text-sm font-bold">{c.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{g.completed}/{g.total} assignments completed</p>
+                    <Card key={c.id} className="rounded-2xl overflow-hidden">
+                      <button
+                        className="w-full text-left p-4 hover:bg-muted/30 transition-colors"
+                        onClick={() => setExpandedClassId(isExpanded ? null : c.id)}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-sm font-bold">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{g.completed}/{g.total} assignments completed</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className={cn('text-xl font-extrabold', getGradeColor(g.pct))}>{g.pct != null ? `${g.pct}%` : '--'}</p>
+                              {g.pct != null && <Badge variant="outline" className="text-[9px]">{getLetterGrade(g.pct)}</Badge>}
+                            </div>
+                            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', isExpanded && 'rotate-180')} />
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className={cn('text-xl font-extrabold', getGradeColor(g.pct))}>{g.pct != null ? `${g.pct}%` : '--'}</p>
-                          {g.pct != null && <Badge variant="outline" className="text-[9px]">{getLetterGrade(g.pct)}</Badge>}
+                        <Progress value={completionPct} className="h-2" />
+                      </button>
+
+                      {isExpanded && classAssigns.length > 0 && (
+                        <div className="border-t px-4 pb-4 pt-2">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Assignment</TableHead>
+                                <TableHead className="text-xs text-right">Score</TableHead>
+                                <TableHead className="text-xs text-right">Grade</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {classAssigns.map(a => {
+                                const job = classJobs.find(j => j.assignmentId === a.id && j.status === 'complete' && j.score != null);
+                                const pct = job ? Math.round((job.score / (job.totalPoints || a.totalPoints || 100)) * 100) : null;
+                                return (
+                                  <TableRow key={a.id}>
+                                    <TableCell className="text-sm font-medium">{a.title}</TableCell>
+                                    <TableCell className="text-sm text-right">
+                                      {job ? <span className="font-semibold">{job.score}/{job.totalPoints || a.totalPoints || 100}</span> : <span className="text-muted-foreground">--</span>}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {pct != null ? (
+                                        <span className={cn('text-sm font-bold', getGradeColor(pct))}>{pct}% <span className="text-xs font-normal text-muted-foreground">({getLetterGrade(pct)})</span></span>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">Not graded</span>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
                         </div>
-                      </div>
-                      <Progress value={completionPct} className="h-2" />
+                      )}
                     </Card>
                   );
                 })

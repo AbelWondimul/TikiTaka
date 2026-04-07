@@ -238,39 +238,39 @@ function TeacherDashboard() {
       </Head>
         {/* Header Section */}
         <header className="mb-10">
-          <h1 className="text-[28px] font-bold text-[#191c1d] tracking-tight">{role === 'student' ? `Welcome back, ${user?.displayName?.split(' ')[0] || 'TA'}` : getGreeting(user?.displayName)}</h1>
-          <p className="text-sm font-normal text-slate-500 mt-1">You have {displayPendingCount} pending submission{displayPendingCount !== 1 ? 's' : ''} to review today.</p>
+          <h1 className="text-[28px] font-bold text-foreground tracking-tight">{role === 'student' ? `Welcome back, ${user?.displayName?.split(' ')[0] || 'TA'}` : getGreeting(user?.displayName)}</h1>
+          <p className="text-sm font-normal text-muted-foreground mt-1">You have {displayPendingCount} pending submission{displayPendingCount !== 1 ? 's' : ''} to review today.</p>
         </header>
 
         {/* Stats Row */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
-            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Total Students</span>
+          <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
+            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-2">Total Students</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{totalStudents}</span>
+              <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{totalStudents}</span>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
-            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Pending</span>
+          <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
+            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-2">Pending</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{displayPendingCount}</span>
+              <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{displayPendingCount}</span>
               {displayPendingCount > 0 && (
                 <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-[10px] font-bold">Action Needed</span>
               )}
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
-            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Quizzes</span>
+          <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
+            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-2">Quizzes</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{quizCount}</span>
+              <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{quizCount}</span>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
-            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-2">Avg Score</span>
+          <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] flex flex-col">
+            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-2">Avg Score</span>
             <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-teal-800">{avgScore != null ? `${avgScore}%` : '--'}</span>
+              <span className="text-3xl font-extrabold text-teal-800 dark:text-teal-200">{avgScore != null ? `${avgScore}%` : '--'}</span>
               {avgScore != null && (
-                <div className="w-16 bg-slate-100 h-1 rounded-full overflow-hidden self-center">
+                <div className="w-16 bg-muted h-1 rounded-full overflow-hidden self-center">
                   <div className="bg-[#005c55] h-full" style={{ width: `${avgScore}%` }}></div>
                 </div>
               )}
@@ -282,35 +282,35 @@ function TeacherDashboard() {
           {/* Class Cards Grid (2/3 width) */}
           <section className="xl:col-span-2">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[#191c1d] tracking-tight">Your Classes</h2>
+              <h2 className="text-xl font-bold text-foreground tracking-tight">Your Classes</h2>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {isLoading ? (
                  <div className="col-span-full">Loading classes...</div>
               ) : classes.length === 0 ? (
-                 <div className="col-span-full bg-white p-12 text-center rounded-xl border border-dashed border-slate-300 space-y-4">
-                    <div className="h-16 w-16 mx-auto bg-teal-50 rounded-2xl flex items-center justify-center">
-                      <span className="material-symbols-outlined text-teal-600 text-3xl">school</span>
+                 <div className="col-span-full bg-card p-12 text-center rounded-xl border border-dashed border-border space-y-4">
+                    <div className="h-16 w-16 mx-auto bg-teal-50 dark:bg-teal-950 rounded-2xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-teal-600 dark:text-teal-400 text-3xl">school</span>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800">Welcome to TikiTaka!</h3>
-                      <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">Create your first class to get started. Upload a knowledge base, post assignments, and let AI handle the grading.</p>
+                      <h3 className="text-lg font-bold text-foreground">Welcome to TikiTaka!</h3>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">Create your first class to get started. Upload a knowledge base, post assignments, and let AI handle the grading.</p>
                     </div>
                     <div className="flex flex-col items-center gap-2 pt-2">
-                      <div className="flex items-center gap-6 text-xs text-slate-400">
-                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">1</span> Create a Class</span>
-                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">2</span> Upload Materials</span>
-                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold">3</span> Assign Work</span>
+                      <div className="flex items-center gap-6 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[10px] font-bold">1</span> Create a Class</span>
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[10px] font-bold">2</span> Upload Materials</span>
+                        <span className="flex items-center gap-1"><span className="h-5 w-5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 flex items-center justify-center text-[10px] font-bold">3</span> Assign Work</span>
                       </div>
                     </div>
                  </div>
               ) : (
                 classes.filter(c => !c.archived).map((c) => (
-                  <div key={c.id} className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col relative">
+                  <div key={c.id} className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col relative">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-1.5">
-                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
+                        <span className="bg-muted text-muted-foreground px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
                           {(c.name || 'CLASS').substring(0, 5)}
                         </span>
                         {c._isTA && (
@@ -319,55 +319,55 @@ function TeacherDashboard() {
                       </div>
                       <div className="flex items-center gap-1">
                         <span
-                          className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-teal-600 transition-colors text-[20px]"
+                          className="material-symbols-outlined text-muted-foreground/50 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors text-[20px]"
                           title="Analytics"
                           onClick={() => router.push(`/teacher/class/${c.id}/analytics`)}
                         >bar_chart</span>
                         {!c._isTA && (
                         <div className="relative" ref={openMenuId === c.id ? menuRef : null}>
                           <span
-                            className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-slate-500"
+                            className="material-symbols-outlined text-muted-foreground/50 cursor-pointer hover:text-muted-foreground"
                             onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === c.id ? null : c.id); }}
                           >more_vert</span>
 
                           {openMenuId === c.id && (
-                            <div className="absolute right-0 top-8 z-50 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1 animate-in fade-in zoom-in-95 duration-150">
+                            <div className="absolute right-0 top-8 z-50 w-52 bg-card rounded-lg shadow-xl border border-border py-1 dark:shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { handleCopyCode(c.classCode, c.id); }}
                               >
                                 <span className="material-symbols-outlined text-[18px]">content_copy</span>
                                 Copy Invite Code
                               </button>
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); setOpenMenuId(null); }}
                               >
                                 <span className="material-symbols-outlined text-[18px]">edit</span>
                                 Edit Name
                               </button>
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => handleToggleInvites(c)}
                               >
                                 <span className="material-symbols-outlined text-[18px]">{c.invitesDisabled ? 'lock_open' : 'lock'}</span>
                                 {c.invitesDisabled ? 'Enable Invites' : 'Close Invites'}
                               </button>
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => handleCloneClass(c)}
                               >
                                 <span className="material-symbols-outlined text-[18px]">content_copy</span>
                                 Clone Class
                               </button>
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { setArchiveConfirmId(c.id); setOpenMenuId(null); }}
                               >
                                 <span className="material-symbols-outlined text-[18px]">archive</span>
                                 Archive Class
                               </button>
-                              <div className="border-t border-slate-100 my-1" />
+                              <div className="border-t border-border my-1" />
                               <button
                                 className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
                                 onClick={() => { setDeleteConfirmId(c.id); setOpenMenuId(null); }}
@@ -386,7 +386,7 @@ function TeacherDashboard() {
                     {editingClassId === c.id ? (
                       <div className="mb-4">
                         <input
-                          className="w-full border border-teal-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          className="w-full border border-teal-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-teal-800 dark:text-teal-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
                           value={editingClassName}
                           onChange={(e) => setEditingClassName(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') handleRenameClass(c.id); if (e.key === 'Escape') setEditingClassId(null); }}
@@ -394,14 +394,14 @@ function TeacherDashboard() {
                         />
                         <div className="flex gap-2 mt-2">
                           <button onClick={() => handleRenameClass(c.id)} className="px-3 py-1 text-xs font-semibold bg-teal-600 text-white rounded-md hover:bg-teal-700">Save</button>
-                          <button onClick={() => setEditingClassId(null)} className="px-3 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                          <button onClick={() => setEditingClassId(null)} className="px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
                         </div>
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-lg font-bold text-teal-800 mb-1 line-clamp-1">{c.name}</h3>
+                        <h3 className="text-lg font-bold text-teal-800 dark:text-teal-200 mb-1 line-clamp-1">{c.name}</h3>
                         <div className="flex items-center gap-2 mb-6 flex-1">
-                          <p className="text-slate-500 text-xs font-medium">{c.studentIds?.length || 0} students enrolled</p>
+                          <p className="text-muted-foreground text-xs font-medium">{c.studentIds?.length || 0} students enrolled</p>
                           {c.invitesDisabled && (
                             <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Invites off</span>
                           )}
@@ -421,7 +421,7 @@ function TeacherDashboard() {
                         <p className="text-xs font-semibold text-amber-700 mb-2">Are you sure you want to archive "{c.name}"?</p>
                         <div className="flex gap-2">
                           <button onClick={() => { handleArchiveClass(c); setArchiveConfirmId(null); }} className="px-3 py-1.5 text-xs font-bold bg-amber-600 text-white rounded-md hover:bg-amber-700">Archive</button>
-                          <button onClick={() => setArchiveConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                          <button onClick={() => setArchiveConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
                         </div>
                       </div>
                     ) : deleteConfirmId === c.id ? (
@@ -429,11 +429,11 @@ function TeacherDashboard() {
                         <p className="text-xs font-semibold text-red-700 mb-2">Are you sure you want to delete "{c.name}"? This cannot be undone.</p>
                         <div className="flex gap-2">
                           <button onClick={() => handleDeleteClass(c.id)} className="px-3 py-1.5 text-xs font-bold bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
-                          <button onClick={() => setDeleteConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                          <button onClick={() => setDeleteConfirmId(null)} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Cancel</button>
                         </div>
                       </div>
                     ) : (
-                      <Link href={`/teacher/class/${c.id}`} className="w-full flex items-center justify-center py-2 text-[#005c55] font-bold text-sm bg-slate-50 rounded-lg hover:bg-[#005c55] hover:text-white transition-colors mt-auto">
+                      <Link href={`/teacher/class/${c.id}`} className="w-full flex items-center justify-center py-2 text-primary font-bold text-sm bg-muted/50 rounded-lg hover:bg-primary hover:text-primary-foreground transition-colors mt-auto">
                         View Class
                       </Link>
                     )}
@@ -445,15 +445,15 @@ function TeacherDashboard() {
             {/* Archived Classes */}
             {classes.some(c => c.archived) && (
               <div className="mt-8">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Archived</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Archived</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {classes.filter(c => c.archived).map((c) => (
-                    <div key={c.id} className="bg-slate-50 p-5 rounded-xl border border-slate-200 opacity-70 hover:opacity-100 transition-opacity flex flex-col">
-                      <h3 className="text-sm font-bold text-slate-500 mb-1 line-clamp-1">{c.name}</h3>
-                      <p className="text-slate-400 text-xs font-medium mb-3">{c.studentIds?.length || 0} students</p>
+                    <div key={c.id} className="bg-muted/50 p-5 rounded-xl border border-border opacity-70 hover:opacity-100 transition-opacity flex flex-col">
+                      <h3 className="text-sm font-bold text-muted-foreground mb-1 line-clamp-1">{c.name}</h3>
+                      <p className="text-muted-foreground text-xs font-medium mb-3">{c.studentIds?.length || 0} students</p>
                       <button
                         onClick={() => handleArchiveClass(c)}
-                        className="text-xs font-semibold text-teal-600 hover:text-teal-800 mt-auto"
+                        className="text-xs font-semibold text-teal-600 hover:text-teal-800 dark:text-teal-200 mt-auto"
                       >
                         Unarchive
                       </button>
@@ -467,24 +467,24 @@ function TeacherDashboard() {
           {/* Recent Activity (1/3 width) */}
           <section className="xl:col-span-1">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[#191c1d] tracking-tight">Recent Activity</h2>
+              <h2 className="text-xl font-bold text-foreground tracking-tight">Recent Activity</h2>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] h-full max-h-[480px] overflow-y-auto">
+            <div className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] h-full max-h-[480px] overflow-y-auto">
               <div className="space-y-6">
                 
                 {recentActivities.length > 0 ? (
                   recentActivities.map((activity, idx) => (
                     <div key={activity.id || idx} className="flex items-start space-x-4">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-[#005c55] shrink-0"></div>
+                      <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0"></div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">
+                        <p className="text-sm font-semibold text-foreground">
                           {activity.status === 'complete' 
                             ? 'Grade update for submission'
                             : activity.status === 'processing' 
                               ? 'Automated grading started'
                               : 'New submission received'}
                         </p>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {classes.find(c => c.id === activity.classId)?.name || 'Unknown Class'} • {getRelativeTime(activity.createdAt)}
                         </p>
                       </div>
@@ -492,7 +492,7 @@ function TeacherDashboard() {
                   ))
                 ) : (
                   <div className="text-center py-8">
-                    <p className="text-sm text-slate-400">No recent activity yet.</p>
+                    <p className="text-sm text-muted-foreground">No recent activity yet.</p>
                   </div>
                 )}
                 

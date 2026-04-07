@@ -37,7 +37,6 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
         <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
         <style>{`
-          body { background-color: #F9FAFB; color: #191c1d; }
           .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
           }
@@ -45,10 +44,10 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
       </Head>
 
       {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-white/85 backdrop-blur-md shadow-[0_1px_3px_rgba(17,24,39,0.06)] flex items-center justify-between px-4 sm:px-8 h-14 sm:h-16">
+      <header className="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-md shadow-[0_1px_3px_rgba(17,24,39,0.06)] flex items-center justify-between px-4 sm:px-8 h-14 sm:h-16">
         <div className="flex items-center gap-4 sm:gap-12">
           {/* Mobile hamburger */}
-          <button className="lg:hidden text-slate-600" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <button className="lg:hidden text-muted-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
             <span className="material-symbols-outlined">{sidebarOpen ? 'close' : 'menu'}</span>
           </button>
           <Link href="/teacher/dashboard">
@@ -61,8 +60,8 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
                 href={item.href}
                 className={
                   activePage === item.key
-                    ? 'text-teal-700 font-bold border-b-2 border-teal-700 py-5 transition-colors duration-200'
-                    : 'text-slate-600 font-medium py-5 hover:text-teal-600 transition-colors duration-200'
+                    ? 'text-teal-700 dark:text-teal-300 font-bold border-b-2 border-teal-700 dark:border-teal-300 py-5 transition-colors duration-200'
+                    : 'text-muted-foreground font-medium py-5 hover:text-teal-600 dark:hover:text-teal-400 transition-colors duration-200'
                 }
               >
                 {item.label}
@@ -71,9 +70,9 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
           </nav>
         </div>
         <div className="flex items-center space-x-3 sm:space-x-6">
-          <div className="flex items-center space-x-2 sm:space-x-4 text-slate-600">
+          <div className="flex items-center space-x-2 sm:space-x-4 text-muted-foreground">
             <button
-              className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors"
+              className="material-symbols-outlined cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
               onClick={() => {
                 const dark = document.documentElement.classList.toggle('dark');
                 localStorage.setItem('tikitaka-theme', dark ? 'dark' : 'light');
@@ -82,11 +81,11 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
             >{isDark ? 'light_mode' : 'dark_mode'}</button>
             <NotificationDropdown variant="material" />
             <span className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors hidden sm:block">help</span>
-            <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-200 border border-slate-200">
+            <div className="h-8 w-8 rounded-full overflow-hidden bg-muted border border-border">
               {user?.photoURL ? (
                 <img className="w-full h-full object-cover" src={user.photoURL} alt="Profile" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-teal-100 text-teal-800 font-bold text-xs">
+                <div className="w-full h-full flex items-center justify-center bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 font-bold text-xs">
                   {user?.displayName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
               )}
@@ -103,15 +102,15 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
       )}
 
       {/* Side Navigation Bar — hidden on mobile, slides in when toggled */}
-      <aside className={`fixed left-0 top-14 sm:top-16 h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] w-64 bg-slate-50 flex flex-col p-4 space-y-2 border-r border-slate-200 z-40 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed left-0 top-14 sm:top-16 h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] w-64 bg-muted/50 flex flex-col p-4 space-y-2 border-r border-border z-40 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-4 py-4 sm:py-6 mb-2">
           <div className="flex items-center space-x-3">
             <div className="h-10 w-10 bg-[#0f766e] rounded-lg flex items-center justify-center text-white">
               <span className="material-symbols-outlined">school</span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-teal-800 leading-none">{isStudentTA ? 'TA Dashboard' : 'Main Menu'}</h2>
-              <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">{isStudentTA ? 'Teaching Assistant' : 'Academic Management'}</p>
+              <h2 className="text-lg font-bold text-teal-800 dark:text-teal-200 leading-none">{isStudentTA ? 'TA Dashboard' : 'Main Menu'}</h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mt-1">{isStudentTA ? 'Teaching Assistant' : 'Academic Management'}</p>
             </div>
           </div>
         </div>
@@ -123,8 +122,8 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
               onClick={() => setSidebarOpen(false)}
               className={
                 activePage === item.key
-                  ? 'flex items-center space-x-3 px-4 py-3 bg-[#CCFBF1] text-[#0F766E] font-bold shadow-sm rounded-lg border-l-4 border-[#0F766E] transition-all duration-200'
-                  : 'flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50 hover:translate-x-1 transition-all duration-200'
+                  ? 'flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary font-bold shadow-sm rounded-lg border-l-4 border-primary transition-all duration-200'
+                  : 'flex items-center space-x-3 px-4 py-3 text-muted-foreground font-medium hover:bg-muted/50 hover:translate-x-1 transition-all duration-200'
               }
             >
               <span
@@ -136,7 +135,7 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
           ))}
 
           {/* Mobile-only nav items */}
-          <div className="md:hidden pt-3 border-t border-slate-200 mt-3 space-y-1">
+          <div className="md:hidden pt-3 border-t border-border mt-3 space-y-1">
             {NAV_ITEMS.map(item => (
               <Link
                 key={item.key}
@@ -144,8 +143,8 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
                 onClick={() => setSidebarOpen(false)}
                 className={
                   activePage === item.key
-                    ? 'flex items-center space-x-3 px-4 py-3 bg-[#CCFBF1] text-[#0F766E] font-bold shadow-sm rounded-lg border-l-4 border-[#0F766E]'
-                    : 'flex items-center space-x-3 px-4 py-3 text-slate-600 font-medium hover:bg-slate-200/50'
+                    ? 'flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary font-bold shadow-sm rounded-lg border-l-4 border-primary'
+                    : 'flex items-center space-x-3 px-4 py-3 text-muted-foreground font-medium hover:bg-muted/50'
                 }
               >
                 <span className="text-sm tracking-normal">{item.label}</span>
@@ -153,14 +152,14 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
             ))}
           </div>
         </nav>
-        <div className="mt-auto pt-4 border-t border-slate-200 space-y-2">
+        <div className="mt-auto pt-4 border-t border-border space-y-2">
           {isStudentTA ? (
             <Link href="/student/dashboard" className="w-full bg-violet-600 py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-violet-900/10">
               <span className="material-symbols-outlined text-lg">arrow_back</span>
               <span>Back to Student</span>
             </Link>
           ) : (
-            <button className="w-full bg-[#005c55] py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
+            <button className="w-full bg-primary py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
               <span className="material-symbols-outlined text-lg">add</span>
               <span>New Class</span>
             </button>
@@ -169,7 +168,7 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
       </aside>
 
       {/* Main Content Area — responsive margin */}
-      <main className="lg:ml-64 mt-14 sm:mt-16 p-4 sm:p-6 lg:p-10 min-h-[calc(100vh-56px)] sm:min-h-[calc(100vh-64px)] bg-[#F9FAFB]">
+      <main className="lg:ml-64 mt-14 sm:mt-16 p-4 sm:p-6 lg:p-10 min-h-[calc(100vh-56px)] sm:min-h-[calc(100vh-64px)] bg-background">
         {children}
       </main>
     </>
