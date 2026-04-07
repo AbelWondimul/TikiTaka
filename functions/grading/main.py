@@ -491,20 +491,22 @@ Example structure (NO other text/markdown outside this array):
                         color_green = (0, 0.6, 0)
                         s = 8  # mark size
 
+                        import os
+                        font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
+                        feedback = q.get('feedback', '')
+
                         if is_full:
-                            # Green checkmark only
+                            # Green checkmark — drawn on page (prints)
                             pdf_page.draw_line(fitz.Point(mark_x, y_c + 2), fitz.Point(mark_x + s * 0.4, y_c + s), color=color_green, width=2)
                             pdf_page.draw_line(fitz.Point(mark_x + s * 0.4, y_c + s), fitz.Point(mark_x + s, y_c - 3), color=color_green, width=2)
                         else:
-                            # Red cross
+                            # Red cross — drawn on page (prints)
                             pdf_page.draw_line(fitz.Point(mark_x, y_c), fitz.Point(mark_x + s, y_c + s), color=color_red, width=2)
                             pdf_page.draw_line(fitz.Point(mark_x, y_c + s), fitz.Point(mark_x + s, y_c), color=color_red, width=2)
 
-                            # Small point deduction label: "-1" next to the cross
+                            # Point deduction label — drawn on page (prints)
                             lost_pts = pos_pts - pts
                             if lost_pts > 0:
-                                import os
-                                font_path = os.path.join(os.path.dirname(__file__), "fonts", "Caveat-Regular.ttf")
                                 label = f"-{lost_pts}"
                                 rect_box = fitz.Rect(mark_x + s + 3, y_c - 4, mark_x + s + 35, y_c + s + 8)
                                 pdf_page.insert_textbox(
@@ -512,8 +514,25 @@ Example structure (NO other text/markdown outside this array):
                                     fontfile=font_path if os.path.exists(font_path) else None,
                                     fontname="f0"
                                 )
-                        # Detailed feedback is available in the digital question breakdown,
-                        # not drawn on the PDF to avoid overlapping on dense worksheets.
+
+                        # Feedback comment — added as screen-only annotation (does NOT print)
+                        if feedback and not is_full:
+                            clean_fb = feedback.strip().lstrip('✓✗◯±').strip()
+                            if clean_fb:
+                                fb_x = mark_x + s + 38 if not is_full else mark_x + s + 5
+                                fb_rect = fitz.Rect(fb_x, y_c - 6, min(fb_x + 200, p['width'] - 10), y_c + 30)
+                                annot = pdf_page.add_freetext_annot(
+                                    fb_rect,
+                                    clean_fb[:50],
+                                    fontsize=9,
+                                    fontname="helv",
+                                    text_color=(0.7, 0, 0),
+                                    fill_color=(1, 1, 1),
+                                    border_color=(0.9, 0.8, 0.8),
+                                )
+                                # Remove PRINT flag (bit 3 = value 4) so it shows on screen but not when printed
+                                annot.set_flags(annot.flags & ~4)
+                                annot.update()
 
 
 
