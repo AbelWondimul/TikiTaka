@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, documentId } from 'firebase/firestore';
 
 /**
  * Generates a random 6-character alphanumeric string to be used as a class code.
@@ -43,7 +43,7 @@ export async function getClassByCode(classCode) {
     const classesRef = collection(db, 'classes');
     const q = query(classesRef, where('classCode', '==', classCode));
     const querySnapshot = await getDocs(q);
-    
+
     if (!querySnapshot.empty) {
       // Assuming class codes are unique, return the first match
       const classDoc = querySnapshot.docs[0];
@@ -54,4 +54,62 @@ export async function getClassByCode(classCode) {
     console.error("Error fetching class by code:", error);
     return null;
   }
+}
+
+/**
+ * Fetches classes where the user is a TA.
+ * @param {string} uid - The user's UID.
+ * @returns {Promise<Object[]>} Array of class objects with `_isTA: true`.
+ */
+export async function getClassesAsTA(uid) {
+  try {
+    const q = query(collection(db, 'classes'), where('taIds', 'array-contains', uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data(), _isTA: true }));
+  } catch (error) {
+    console.error("Error fetching TA classes:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetches all classes a user can access: owned (teacher) + TA classes.
+ * Deduplicates by class ID. TA-only classes are marked with `_isTA: true`.
+ * @param {string} uid - The user's UID.
+ * @param {string} role - The user's role ('teacher' or 'student').
+ * @returns {Promise<Object[]>} Merged array of class objects.
+ */
+export async function getAccessibleClasses(uid, role) {
+  const results = [];
+  const seenIds = new Set();
+
+  // If teacher, fetch owned classes
+  if (role === 'teacher') {
+    try {
+      const q = query(collection(db, 'classes'), where('teacherId', '==', uid));
+      const snap = await getDocs(q);
+      snap.forEach(d => {
+        results.push({ id: d.id, ...d.data() });
+        seenIds.add(d.id);
+      });
+    } catch (error) {
+      console.error("Error fetching owned classes:", error);
+    }
+  }
+
+  // Fetch TA classes
+  try {
+    const taQ = query(collection(db, 'classes'), where('taIds', 'array-contains', uid));
+    const taSnap = await getDocs(taQ);
+    taSnap.forEach(d => {
+      if (!seenIds.has(d.id)) {
+        results.push({ id: d.id, ...d.data(), _isTA: true });
+        seenIds.add(d.id);
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching TA classes:", error);
+  }
+
+  return results;
 }

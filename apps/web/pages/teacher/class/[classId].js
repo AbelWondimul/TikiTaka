@@ -61,6 +61,7 @@ function TeacherClassPage() {
   }
 
   const [classData, setClassData] = useState(null);
+  const [isClassOwner, setIsClassOwner] = useState(true);
   const [enrolledStudents, setEnrolledStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -188,12 +189,10 @@ function TeacherClassPage() {
     if (!classId) return;
     try {
       setIsQuizzesLoading(true);
-      const q = query(
-        collection(db, 'quizzes'),
-        where('classId', '==', classId),
-        where('teacherId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
+      const isOwner = classData?.teacherId === user.uid;
+      const q = isOwner
+        ? query(collection(db, 'quizzes'), where('classId', '==', classId), where('teacherId', '==', user.uid), orderBy('createdAt', 'desc'))
+        : query(collection(db, 'quizzes'), where('classId', '==', classId), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       const quizList = [];
       querySnapshot.forEach((docSnap) => {
@@ -211,12 +210,10 @@ function TeacherClassPage() {
     if (!classId) return;
     try {
       setIsAssignmentsLoading(true);
-      const q = query(
-        collection(db, 'assignments'),
-        where('classId', '==', classId),
-        where('teacherId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
+      const isOwner = classData?.teacherId === user.uid;
+      const q = isOwner
+        ? query(collection(db, 'assignments'), where('classId', '==', classId), where('teacherId', '==', user.uid), orderBy('createdAt', 'desc'))
+        : query(collection(db, 'assignments'), where('classId', '==', classId), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       const list = [];
       querySnapshot.forEach((docSnap) => {
@@ -245,13 +242,16 @@ function TeacherClassPage() {
           return;
         }
 
-        // 2. Verify ownership
-        if (fetchedClass.teacherId !== user.uid) {
+        // 2. Verify ownership or TA access
+        const isOwner = fetchedClass.teacherId === user.uid;
+        const isTA = (fetchedClass.taIds || []).includes(user.uid);
+        if (!isOwner && !isTA) {
           setError("You do not have permission to view this class.");
           setIsLoading(false);
           return;
         }
 
+        setIsClassOwner(isOwner);
         setClassData(fetchedClass);
 
         // 3. Fetch student details based on studentIds array
@@ -269,16 +269,12 @@ function TeacherClassPage() {
           // 4. Fetch Performance Data
           try {
             setIsPerformanceLoading(true);
-            const gradingJobsQuery = query(
-              collection(db, 'gradingJobs'), 
-              where('classId', '==', classId),
-              where('teacherId', '==', user.uid)
-            );
-            const quizQuery = query(
-              collection(db, 'quizAttempts'), 
-              where('classId', '==', classId),
-              where('teacherId', '==', user.uid)
-            );
+            const gradingJobsQuery = isOwner
+              ? query(collection(db, 'gradingJobs'), where('classId', '==', classId), where('teacherId', '==', user.uid))
+              : query(collection(db, 'gradingJobs'), where('classId', '==', classId));
+            const quizQuery = isOwner
+              ? query(collection(db, 'quizAttempts'), where('classId', '==', classId), where('teacherId', '==', user.uid))
+              : query(collection(db, 'quizAttempts'), where('classId', '==', classId));
             
             const [jobsSnapshot, quizSnapshot] = await Promise.all([
               getDocs(gradingJobsQuery),
@@ -884,12 +880,14 @@ function TeacherClassPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isClassOwner && (
               <Button
                 className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                 onClick={() => setIsAnnouncementOpen(true)}
               >
                 <Megaphone className="h-4 w-4 mr-2" /> <span className="hidden sm:inline">Announce</span>
               </Button>
+              )}
               <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/teacher/class/${classId}/modules`)}>
                 <FileText className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Modules</span>
               </Button>
@@ -955,14 +953,16 @@ function TeacherClassPage() {
                                   Quiz: <b className="text-foreground ml-1">{student.latestQuiz !== null ? `${student.latestQuiz}%` : 'N/A'}</b>
                                 </span>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className={`h-7 text-[10px] rounded-md px-2 ${isTA ? 'text-violet-700 bg-violet-50 hover:bg-violet-100' : 'text-muted-foreground hover:text-violet-700 hover:bg-violet-50'}`}
-                                onClick={(e) => { e.stopPropagation(); handleToggleTA(student.uid); }}
-                              >
-                                {isTA ? 'Remove TA' : 'Make TA'}
-                              </Button>
+                              {isClassOwner && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`h-7 text-[10px] rounded-md px-2 ${isTA ? 'text-violet-700 bg-violet-50 hover:bg-violet-100' : 'text-muted-foreground hover:text-violet-700 hover:bg-violet-50'}`}
+                                  onClick={(e) => { e.stopPropagation(); handleToggleTA(student.uid); }}
+                                >
+                                  {isTA ? 'Remove TA' : 'Make TA'}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </li>
@@ -1228,14 +1228,15 @@ function TeacherClassPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 
-                {/* Upload Form */}
+                {/* Upload Form — owner only */}
+                {isClassOwner && (
                 <div className="bg-muted/30 border rounded-xl p-4 space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="docTitle">Document Title</Label>
-                      <Input 
-                        id="docTitle" 
-                        placeholder="e.g., Chapter 4 Reading" 
+                      <Input
+                        id="docTitle"
+                        placeholder="e.g., Chapter 4 Reading"
                         value={uploadTitle}
                         onChange={(e) => setUploadTitle(e.target.value)}
                         disabled={isUploading}
@@ -1243,10 +1244,10 @@ function TeacherClassPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="docFile">PDF File</Label>
-                      <Input 
-                        id="docFile" 
-                        type="file" 
-                        accept=".pdf" 
+                      <Input
+                        id="docFile"
+                        type="file"
+                        accept=".pdf"
                         ref={fileInputRef}
                         onChange={handleFileChange}
                         disabled={isUploading}
@@ -1283,9 +1284,9 @@ function TeacherClassPage() {
                     </div>
                   )}
 
-                  <Button 
-                    onClick={handleUpload} 
-                    disabled={isUploading || !uploadFile || !uploadTitle.trim()} 
+                  <Button
+                    onClick={handleUpload}
+                    disabled={isUploading || !uploadFile || !uploadTitle.trim()}
                     className="w-full sm:w-auto mt-2"
                   >
                     {isUploading ? (
@@ -1295,6 +1296,7 @@ function TeacherClassPage() {
                     )}
                   </Button>
                 </div>
+                )}
 
                 {/* Document List */}
                 <div className="pt-2">
@@ -1333,14 +1335,16 @@ function TeacherClassPage() {
                               </p>
                             </div>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-muted-foreground hover:text-destructive shrink-0 ml-2"
-                            onClick={() => handleDeleteDoc(doc.id, doc.storageUrl)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {isClassOwner && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                              onClick={() => handleDeleteDoc(doc.id, doc.storageUrl)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -1363,10 +1367,12 @@ function TeacherClassPage() {
                       Create and manage quizzes for your students.
                     </CardDescription>
                   </div>
-                  <Button onClick={openNewQuizDialog}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Quiz
-                  </Button>
+                  {isClassOwner && (
+                    <Button onClick={openNewQuizDialog}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Quiz
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -1430,6 +1436,7 @@ function TeacherClassPage() {
                               >
                                 View Results
                               </Button>
+                              {isClassOwner && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1451,6 +1458,7 @@ function TeacherClassPage() {
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1479,13 +1487,14 @@ function TeacherClassPage() {
               <CardContent className="space-y-6">
                 
                 {/* Upload Form */}
+                {isClassOwner && (
                 <div className="bg-muted/30 border rounded-xl p-4 space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="asTitle">Assignment Title</Label>
-                      <Input 
-                        id="asTitle" 
-                        placeholder="Homework 1: Newton's Laws" 
+                      <Input
+                        id="asTitle"
+                        placeholder="Homework 1: Newton's Laws"
                         value={uploadAssignmentTitle}
                         onChange={(e) => setUploadAssignmentTitle(e.target.value)}
                         disabled={isAssignmentUploading}
@@ -1505,17 +1514,17 @@ function TeacherClassPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="asFile">Homework PDF</Label>
-                    <Input 
-                      id="asFile" 
-                      type="file" 
-                      accept=".pdf" 
+                    <Input
+                      id="asFile"
+                      type="file"
+                      accept=".pdf"
                       ref={assignmentFileInputRef}
                       onChange={handleAssignmentFileChange}
                       disabled={isAssignmentUploading}
                       className="cursor-pointer file:cursor-pointer file:text-foreground file:font-medium file:border-0 file:bg-transparent file:mr-4"
                     />
                   </div>
-                  
+
                   {uploadAssignmentError && (
                     <Alert variant="destructive" className="py-2 px-3">
                       <AlertDescription className="text-xs">{uploadAssignmentError}</AlertDescription>
@@ -1532,9 +1541,9 @@ function TeacherClassPage() {
                     </div>
                   )}
 
-                  <Button 
-                    onClick={handleAssignmentUpload} 
-                    disabled={isAssignmentUploading || !uploadAssignmentFile || !uploadAssignmentTitle.trim()} 
+                  <Button
+                    onClick={handleAssignmentUpload}
+                    disabled={isAssignmentUploading || !uploadAssignmentFile || !uploadAssignmentTitle.trim()}
                     className="w-full sm:w-auto mt-2"
                   >
                     {isAssignmentUploading ? (
@@ -1544,6 +1553,7 @@ function TeacherClassPage() {
                     )}
                   </Button>
                 </div>
+                )}
 
                 {/* Assignment List */}
                 <div className="pt-2">
@@ -1594,6 +1604,7 @@ function TeacherClassPage() {
                                  );
                                })() : <span className="text-muted-foreground text-xs">—</span>}
                              </TableCell>
+                             {isClassOwner && (
                              <TableCell onClick={(e) => e.stopPropagation()}>
                                <DropdownMenu>
                                  <DropdownMenuTrigger asChild>
@@ -1621,6 +1632,7 @@ function TeacherClassPage() {
                                  </DropdownMenuContent>
                                </DropdownMenu>
                              </TableCell>
+                             )}
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1987,4 +1999,4 @@ function TeacherClassPage() {
 }
 
 // Wrap with teacher auth guard
-export default withAuth(TeacherClassPage, 'teacher');
+export default withAuth(TeacherClassPage, ['teacher', 'ta']);

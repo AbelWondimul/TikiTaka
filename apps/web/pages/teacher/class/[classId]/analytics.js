@@ -91,11 +91,10 @@ function ClassAnalytics() {
       setAssignments(assignList);
 
       // 3. Fetch all grading jobs for this class
-      const jobsQ = query(
-        collection(db, 'gradingJobs'),
-        where('classId', '==', classId),
-        where('teacherId', '==', user.uid)
-      );
+      const isTA = (cls.taIds || []).includes(user.uid);
+      const jobsQ = isTA
+        ? query(collection(db, 'gradingJobs'), where('classId', '==', classId))
+        : query(collection(db, 'gradingJobs'), where('classId', '==', classId), where('teacherId', '==', user.uid));
       const jobsSnap = await getDocs(jobsQ);
       const jobList = [];
       jobsSnap.forEach(d => jobList.push({ id: d.id, ...d.data() }));
@@ -485,4 +484,4 @@ function ClassAnalytics() {
   );
 }
 
-export default withAuth(ClassAnalytics, 'teacher');
+export default withAuth(ClassAnalytics, ['teacher', 'ta']);

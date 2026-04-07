@@ -5,9 +5,10 @@ import { auth } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { User, LogOut, Settings, Moon, Sun } from 'lucide-react';
+import { User, LogOut, Settings, Moon, Sun, GraduationCap } from 'lucide-react';
 import Logo from './Logo';
 import NotificationDropdown from './NotificationDropdown';
+import { useTA } from '@/lib/useTA';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -23,6 +24,7 @@ import { useState } from 'react';
 
 export default function Header() {
   const { user, role } = useAuth();
+  const { isTA } = useTA();
   const router = useRouter();
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
@@ -58,6 +60,17 @@ export default function Header() {
         )}
 
         <div className="flex items-center gap-3 sm:gap-4">
+          {role === 'student' && isTA && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden sm:flex items-center gap-1.5 text-violet-700 border-violet-200 hover:bg-violet-50 font-semibold text-xs"
+              onClick={() => router.push('/teacher/dashboard')}
+            >
+              <GraduationCap className="h-3.5 w-3.5" />
+              TA Dashboard
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

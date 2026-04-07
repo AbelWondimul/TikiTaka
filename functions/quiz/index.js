@@ -193,9 +193,12 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
     const db = admin.firestore();
 
     const classSnap = await db.collection("classes").doc(classId).get();
-    if (!classSnap.exists || classSnap.data().teacherId !== context.auth.uid) {
+    const classData = classSnap.exists ? classSnap.data() : null;
+    const isOwner = classData && classData.teacherId === context.auth.uid;
+    const isTA = classData && (classData.taIds || []).includes(context.auth.uid);
+    if (!classSnap.exists || (!isOwner && !isTA)) {
       throw new functions.https.HttpsError(
-        'permission-denied', 
+        'permission-denied',
         'Not authorized to view performance for this class.'
       );
     }

@@ -15,6 +15,7 @@ import { ref, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/firebase';
 import { uploadWithProgress } from '@/lib/storageUtils';
 import { useAuth } from '@/lib/auth-context';
+import { getAccessibleClasses } from '@/lib/classUtils';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
 import { deleteFile } from '@/lib/storageUtils';
@@ -40,7 +41,7 @@ import {
 import { Loader2, FileText, Trash2, ExternalLink, Search, FolderOpen, Plus, Upload } from 'lucide-react';
 
 function TeacherResources() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [classes, setClasses] = useState([]);
   const [kbDocs, setKbDocs] = useState([]);
   const [moduleResources, setModuleResources] = useState([]);
@@ -71,34 +72,54 @@ function TeacherResources() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch classes
-      const classesQ = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
-      const classesSnap = await getDocs(classesQ);
-      const cls = [];
-      classesSnap.forEach(d => cls.push({ id: d.id, ...d.data() }));
+      // Fetch classes (owned + TA)
+      const cls = await getAccessibleClasses(user.uid, role);
       setClasses(cls);
 
-      // Fetch all KB docs across all classes
+      const taClassIds = cls.filter(c => c._isTA).map(c => c.id);
+
+      // Fetch all KB docs (owned + TA classes)
+      const docs = [];
+      const seenKbIds = new Set();
       const kbQ = query(collection(db, 'knowledgeBase'), where('teacherId', '==', user.uid));
       const kbSnap = await getDocs(kbQ);
-      const docs = [];
-      kbSnap.forEach(d => docs.push({ id: d.id, ...d.data() }));
+      kbSnap.forEach(d => { docs.push({ id: d.id, ...d.data() }); seenKbIds.add(d.id); });
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taSnap = await getDocs(query(collection(db, 'knowledgeBase'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taSnap.forEach(d => { if (!seenKbIds.has(d.id)) { docs.push({ id: d.id, ...d.data() }); seenKbIds.add(d.id); } });
+        }
+      }
       docs.sort((a, b) => (b.uploadedAt?.toMillis?.() || 0) - (a.uploadedAt?.toMillis?.() || 0));
       setKbDocs(docs);
 
-      // Fetch module resources
+      // Fetch module resources (owned + TA classes)
+      const modRes = [];
+      const seenModResIds = new Set();
       const modResQ = query(collection(db, 'moduleResources'), where('teacherId', '==', user.uid));
       const modResSnap = await getDocs(modResQ);
-      const modRes = [];
-      modResSnap.forEach(d => modRes.push({ id: d.id, ...d.data() }));
+      modResSnap.forEach(d => { modRes.push({ id: d.id, ...d.data() }); seenModResIds.add(d.id); });
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taSnap = await getDocs(query(collection(db, 'moduleResources'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taSnap.forEach(d => { if (!seenModResIds.has(d.id)) { modRes.push({ id: d.id, ...d.data() }); seenModResIds.add(d.id); } });
+        }
+      }
       modRes.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setModuleResources(modRes);
 
-      // Fetch modules for names
+      // Fetch modules for names (owned + TA classes)
+      const mods = [];
+      const seenModIds = new Set();
       const modsQ = query(collection(db, 'modules'), where('teacherId', '==', user.uid));
       const modsSnap = await getDocs(modsQ);
-      const mods = [];
-      modsSnap.forEach(d => mods.push({ id: d.id, ...d.data() }));
+      modsSnap.forEach(d => { mods.push({ id: d.id, ...d.data() }); seenModIds.add(d.id); });
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taSnap = await getDocs(query(collection(db, 'modules'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taSnap.forEach(d => { if (!seenModIds.has(d.id)) { mods.push({ id: d.id, ...d.data() }); seenModIds.add(d.id); } });
+        }
+      }
       setModules(mods);
     } catch (err) {
       console.error('Error fetching resources:', err);
@@ -468,4 +489,4 @@ function TeacherResources() {
   );
 }
 
-export default withAuth(TeacherResources, 'teacher');
+export default withAuth(TeacherResources, ['teacher', 'ta']);

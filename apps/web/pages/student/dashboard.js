@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import Header from '@/components/layout/Header';
 import { getClassByCode } from '@/lib/classUtils';
+import { useTA } from '@/lib/useTA';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +34,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import StudentNavTabs from '@/components/layout/StudentNavTabs';
-import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, Sparkles, CalendarCheck, MoreVertical, LogOut, CheckCircle2 } from 'lucide-react';
+import { Loader2, BookOpen, UserPlus, Brain, FlaskConical, Sigma, LayoutDashboard, ClipboardList, Sparkles, CalendarCheck, MoreVertical, LogOut, CheckCircle2, GraduationCap } from 'lucide-react';
 import TikaChatbot from '@/components/TikaChatbot';
 
 // Map class index to icon colors for variety
@@ -77,6 +78,7 @@ const joinFormSchema = z.object({
 
 function StudentDashboard() {
   const { user } = useAuth();
+  const { taClasses, isTA, isTALoading } = useTA();
   const [enrolledClasses, setEnrolledClasses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -507,6 +509,41 @@ function StudentDashboard() {
             </div>
           )}
         </section>
+
+        {/* ── TA Classes ── */}
+        {isTA && taClasses.length > 0 && (
+          <section className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold tracking-tight">TA Classes</h2>
+              <Badge className="bg-violet-100 text-violet-700 border-none text-xs font-bold">Teaching Assistant</Badge>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {taClasses.map((c, idx) => (
+                <Card key={c.id} className="flex flex-col justify-between shadow-sm rounded-2xl hover:shadow-md transition-all border-violet-200/50 relative">
+                  <CardHeader className="pb-4">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm bg-violet-50">
+                        <GraduationCap className="h-6 w-6 text-violet-600" />
+                      </div>
+                      <Badge variant="outline" className="font-mono text-xs text-violet-600 border-violet-200">
+                        TA
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-xl font-semibold mb-1">{c.name}</CardTitle>
+                    <CardDescription className="text-sm font-medium">
+                      {c.studentIds?.length || 0} students enrolled
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-2">
+                    <Button asChild className="w-full bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 font-semibold rounded-xl h-11">
+                      <Link href={`/teacher/class/${c.id}`}>Open TA View</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Assignments, Submissions & Join ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

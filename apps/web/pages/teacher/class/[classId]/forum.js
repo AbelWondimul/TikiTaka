@@ -151,9 +151,9 @@ function TeacherForum() {
     try {
       const reply = {
         content: replyText.trim(),
-        role: 'teacher',
+        role: isTA ? 'ta' : 'teacher',
         authorId: user.uid,
-        displayName: user.displayName || user.email || 'Teacher',
+        displayName: user.displayName || user.email || (isTA ? 'TA' : 'Teacher'),
         createdAt: new Date().toISOString(),
       };
       await updateDoc(doc(db, 'forumPosts', postId), {
@@ -171,6 +171,7 @@ function TeacherForum() {
     }
   };
 
+  const isTA = classData && (classData.taIds || []).includes(user.uid);
   const blockedCount = (classData?.blockedForumUsers || []).length;
   const isAuthorBlocked = (post) => (classData?.blockedForumUsers || []).includes(post.authorId);
 
@@ -199,17 +200,19 @@ function TeacherForum() {
         <Card className="p-4 rounded-2xl border-border/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <Switch checked={forumEnabled} onCheckedChange={handleToggleForum} id="forum-toggle" />
-                <Label htmlFor="forum-toggle" className="text-sm font-medium cursor-pointer">
-                  {forumEnabled ? (
-                    <span className="flex items-center gap-1.5 text-green-700"><Eye className="h-4 w-4" /> Forum Active</span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-muted-foreground"><EyeOff className="h-4 w-4" /> Forum Disabled</span>
-                  )}
-                </Label>
-              </div>
-              {blockedCount > 0 && (
+              {!isTA && (
+                <div className="flex items-center gap-3">
+                  <Switch checked={forumEnabled} onCheckedChange={handleToggleForum} id="forum-toggle" />
+                  <Label htmlFor="forum-toggle" className="text-sm font-medium cursor-pointer">
+                    {forumEnabled ? (
+                      <span className="flex items-center gap-1.5 text-green-700"><Eye className="h-4 w-4" /> Forum Active</span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-muted-foreground"><EyeOff className="h-4 w-4" /> Forum Disabled</span>
+                    )}
+                  </Label>
+                </div>
+              )}
+              {!isTA && blockedCount > 0 && (
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">{blockedCount} blocked</Badge>
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-primary" onClick={handleUnblockAll}>Unblock all</Button>
@@ -268,30 +271,32 @@ function TeacherForum() {
                     </div>
 
                     {/* Moderation actions */}
-                    <div className="flex flex-col gap-1 shrink-0">
-                      {deleteConfirmId === post.id ? (
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="destructive" className="h-7 text-[10px] rounded-lg px-2" onClick={() => handleDeletePost(post.id)}>Delete</Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] rounded-lg px-2" onClick={() => setDeleteConfirmId(null)}>No</Button>
-                        </div>
-                      ) : blockConfirmId === post.id ? (
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="destructive" className="h-7 text-[10px] rounded-lg px-2" onClick={() => handleBlockAuthor(post)}>Block</Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] rounded-lg px-2" onClick={() => setBlockConfirmId(null)}>No</Button>
-                        </div>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg" title="Remove post" onClick={() => setDeleteConfirmId(post.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                          {!blocked && (
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg" title="Block author" onClick={() => setBlockConfirmId(post.id)}>
-                              <ShieldBan className="h-3.5 w-3.5" />
+                    {!isTA && (
+                      <div className="flex flex-col gap-1 shrink-0">
+                        {deleteConfirmId === post.id ? (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-7 text-[10px] rounded-lg px-2" onClick={() => handleDeletePost(post.id)}>Delete</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-[10px] rounded-lg px-2" onClick={() => setDeleteConfirmId(null)}>No</Button>
+                          </div>
+                        ) : blockConfirmId === post.id ? (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-7 text-[10px] rounded-lg px-2" onClick={() => handleBlockAuthor(post)}>Block</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-[10px] rounded-lg px-2" onClick={() => setBlockConfirmId(null)}>No</Button>
+                          </div>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg" title="Remove post" onClick={() => setDeleteConfirmId(post.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                            {!blocked && (
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg" title="Block author" onClick={() => setBlockConfirmId(post.id)}>
+                                <ShieldBan className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Replies */}
@@ -333,7 +338,7 @@ function TeacherForum() {
                       <Input
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Reply as teacher (your name will be shown)..."
+                        placeholder={isTA ? "Reply as TA (your name will be shown)..." : "Reply as teacher (your name will be shown)..."}
                         className="flex-1 h-9 rounded-lg text-sm"
                         maxLength={500}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(post.id); } }}
@@ -353,4 +358,4 @@ function TeacherForum() {
   );
 }
 
-export default withAuth(TeacherForum, 'teacher');
+export default withAuth(TeacherForum, ['teacher', 'ta']);

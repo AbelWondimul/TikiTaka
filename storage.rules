@@ -20,6 +20,12 @@ service firebase.storage {
         request.auth.uid in firestore.get(/databases/(default)/documents/classes/$(classId)).data.studentIds;
     }
 
+    function isTAofClass(classId) {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/classes/$(classId)) &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/classes/$(classId)).data.get('taIds', []);
+    }
+
     match /raw/{uid}/{jobId} {
       allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 20 * 1024 * 1024;
       allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
@@ -40,19 +46,19 @@ service firebase.storage {
     }
 
     match /knowledgeBase/{classId}/{docId} {
-      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId));
+      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId));
       allow write: if isTeacher();
     }
 
     match /moduleResources/{classId}/{docId} {
-      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId));
+      allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId));
       allow write: if isTeacher();
     }
 
     match /assignments/{classId}/{fileId} {
       allow write: if isTeacher();
       allow read: if isAuthenticated() && (
-        isTeacher() || isEnrolledInClass(classId)
+        isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId)
       );
     }
 

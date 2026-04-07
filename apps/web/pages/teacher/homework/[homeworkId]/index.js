@@ -69,8 +69,9 @@ function AssignmentSubmissionsPage() {
 
         // 2. Fetch Class for Roster
         const classSnap = await getDoc(doc(db, 'classes', classId));
+        let cData = null;
         if (classSnap.exists()) {
-          const cData = classSnap.data();
+          cData = classSnap.data();
           setClassData(cData);
 
           // 3. Fetch Students
@@ -88,12 +89,10 @@ function AssignmentSubmissionsPage() {
         }
 
         // 4. Fetch Submissions (Grading Jobs)
-        const jobsQuery = query(
-          collection(db, 'gradingJobs'),
-          where('assignmentId', '==', homeworkId),
-          where('classId', '==', classId),
-          where('teacherId', '==', user.uid)
-        );
+        const isTA = cData && (cData.taIds || []).includes(user.uid);
+        const jobsQuery = isTA
+          ? query(collection(db, 'gradingJobs'), where('assignmentId', '==', homeworkId), where('classId', '==', classId))
+          : query(collection(db, 'gradingJobs'), where('assignmentId', '==', homeworkId), where('classId', '==', classId), where('teacherId', '==', user.uid));
         const jobsSnap = await getDocs(jobsQuery);
         const jobsList = jobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setSubmissions(jobsList);
@@ -252,4 +251,4 @@ function AssignmentSubmissionsPage() {
   );
 }
 
-export default withAuth(AssignmentSubmissionsPage, 'teacher');
+export default withAuth(AssignmentSubmissionsPage, ['teacher', 'ta']);

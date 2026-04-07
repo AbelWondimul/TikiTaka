@@ -921,15 +921,16 @@ def confusion_heatmap(req: https_fn.CallableRequest):
 
     db = _get_db()
 
-    # Verify teacher owns the class
+    # Verify teacher owns the class or is a TA
     class_doc = db.collection('classes').document(class_id).get()
-    if not class_doc.exists or class_doc.to_dict().get('teacherId') != req.auth.uid:
+    class_data = class_doc.to_dict() if class_doc.exists else None
+    is_owner = class_data and class_data.get('teacherId') == req.auth.uid
+    is_ta = class_data and req.auth.uid in class_data.get('taIds', [])
+    if not class_doc.exists or (not is_owner and not is_ta):
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            message="You do not own this class."
+            message="You do not have access to this class."
         )
-
-    class_data = class_doc.to_dict()
     student_count = len(class_data.get('studentIds', []))
 
     # 1. Gather quiz topic gaps
@@ -948,7 +949,10 @@ def confusion_heatmap(req: https_fn.CallableRequest):
 
     # 2. Gather assignment grading feedback
     assignment_data = []
-    jobs_query = db.collection('gradingJobs').where('classId', '==', class_id).where('teacherId', '==', req.auth.uid).stream()
+    jobs_ref = db.collection('gradingJobs').where('classId', '==', class_id)
+    if not is_ta:
+        jobs_ref = jobs_ref.where('teacherId', '==', req.auth.uid)
+    jobs_query = jobs_ref.stream()
     for job_doc in jobs_query:
         job = job_doc.to_dict()
         if job.get('status') == 'complete' and job.get('gradedQuestions'):

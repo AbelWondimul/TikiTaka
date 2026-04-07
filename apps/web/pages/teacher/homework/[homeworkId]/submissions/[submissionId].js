@@ -172,4 +172,4 @@ function TeacherSubmissionReview() {
   );
 }
 
-export default withAuth(TeacherSubmissionReview, 'teacher');
+export default withAuth(TeacherSubmissionReview, ['teacher', 'ta']);

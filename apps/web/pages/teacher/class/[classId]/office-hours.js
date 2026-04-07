@@ -43,9 +43,13 @@ function TeacherOfficeHours() {
     setIsLoading(true);
     try {
       const classDoc = await getDoc(doc(db, 'classes', classId));
-      if (classDoc.exists()) setClassData({ id: classDoc.id, ...classDoc.data() });
+      const cls = classDoc.exists() ? { id: classDoc.id, ...classDoc.data() } : null;
+      if (cls) setClassData(cls);
 
-      const slotsQ = query(collection(db, 'officeHours'), where('classId', '==', classId), where('teacherId', '==', user.uid));
+      const isTA = cls && (cls.taIds || []).includes(user.uid);
+      const slotsQ = isTA
+        ? query(collection(db, 'officeHours'), where('classId', '==', classId))
+        : query(collection(db, 'officeHours'), where('classId', '==', classId), where('teacherId', '==', user.uid));
       const slotsSnap = await getDocs(slotsQ);
       const s = []; slotsSnap.forEach(d => s.push({ id: d.id, ...d.data() }));
       setSlots(s);
@@ -87,6 +91,8 @@ function TeacherOfficeHours() {
     setBookings(prev => prev.filter(b => b.id !== booking.id));
   };
 
+  const isTA = classData && (classData.taIds || []).includes(user.uid);
+
   const fmtTime = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h>12?h-12:h||12}:${m.toString().padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
 
   return (
@@ -102,7 +108,7 @@ function TeacherOfficeHours() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{classData?.name} — Office Hours</h1>
             <p className="text-sm text-muted-foreground mt-1">Set availability for students to book time with you.</p>
           </div>
-          <Button onClick={() => setIsDialogOpen(true)} className="rounded-xl"><Plus className="h-4 w-4 mr-2" /> Add Slot</Button>
+          {!isTA && <Button onClick={() => setIsDialogOpen(true)} className="rounded-xl"><Plus className="h-4 w-4 mr-2" /> Add Slot</Button>}
         </div>
 
         {isLoading ? <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : (
@@ -120,7 +126,7 @@ function TeacherOfficeHours() {
                         <p className="text-sm font-semibold">{s.day}</p>
                         <p className="text-xs text-muted-foreground">{fmtTime(s.startTime)} - {fmtTime(s.endTime)}{s.location ? ` · ${s.location}` : ''}</p>
                       </div>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSlot(s.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      {!isTA && <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSlot(s.id)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                     </Card>
                   ))}
                 </div>
@@ -148,7 +154,7 @@ function TeacherOfficeHours() {
                         </div>
                         <div className="flex gap-1.5 shrink-0">
                           <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => window.open(gcalUrl, '_blank')}><Calendar className="h-3 w-3 mr-1" /> GCal</Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleCancelBooking(b)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          {!isTA && <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleCancelBooking(b)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                         </div>
                       </Card>
                     );
@@ -182,4 +188,4 @@ function TeacherOfficeHours() {
     </>
   );
 }
-export default withAuth(TeacherOfficeHours, 'teacher');
+export default withAuth(TeacherOfficeHours, ['teacher', 'ta']);

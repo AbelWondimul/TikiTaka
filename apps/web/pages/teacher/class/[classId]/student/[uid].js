@@ -124,12 +124,10 @@ function StudentPerformancePage() {
         setAssignments(assignList);
 
         // 3. Fetch grading jobs for this student in this class
-        const jobsQuery = query(
-          collection(db, 'gradingJobs'),
-          where('classId', '==', classId),
-          where('studentId', '==', uid),
-          where('teacherId', '==', user.uid)
-        );
+        const isTA = classSnap.exists() && (classSnap.data().taIds || []).includes(user.uid);
+        const jobsQuery = isTA
+          ? query(collection(db, 'gradingJobs'), where('classId', '==', classId), where('studentId', '==', uid))
+          : query(collection(db, 'gradingJobs'), where('classId', '==', classId), where('studentId', '==', uid), where('teacherId', '==', user.uid));
         const jobsSnap = await getDocs(jobsQuery);
         const jobs = jobsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         jobs.sort((a, b) => (b.completedAt?.toMillis?.() || b.createdAt?.toMillis?.() || 0) - (a.completedAt?.toMillis?.() || a.createdAt?.toMillis?.() || 0));
@@ -180,6 +178,8 @@ function StudentPerformancePage() {
 
     loadData();
   }, [classId, uid, user]);
+
+  const isTA = classData && (classData.taIds || []).includes(user.uid);
 
   // Compute stats
   const completedJobs = gradingJobs.filter(j => j.status === 'complete' && j.score != null);
@@ -333,7 +333,7 @@ function StudentPerformancePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 ml-4">
-                          {isGraded && job.status === 'disputed' && (
+                          {!isTA && isGraded && job.status === 'disputed' && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -412,14 +412,16 @@ function StudentPerformancePage() {
                           </div>
 
                           <div className="flex justify-end gap-2 pt-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="rounded-lg text-xs"
-                              onClick={(e) => handleRegrade(job.id, e)}
-                            >
-                              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Re-grade
-                            </Button>
+                            {!isTA && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-lg text-xs"
+                                onClick={(e) => handleRegrade(job.id, e)}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Re-grade
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               className="rounded-lg text-xs"
@@ -540,4 +542,4 @@ function StudentPerformancePage() {
   );
 }
 
-export default withAuth(StudentPerformancePage, 'teacher');
+export default withAuth(StudentPerformancePage, ['teacher', 'ta']);

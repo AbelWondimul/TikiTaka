@@ -101,6 +101,8 @@ function AttendancePage() {
   const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
   const tardyCount = Object.values(attendance).filter(v => v === 'tardy').length;
 
+  const isTA = classData && (classData.taIds || []).includes(user.uid);
+
   const exportCSV = () => {
     const headers = ['Student', 'Email', 'Status'];
     const rows = students.map(s => [s.displayName, s.email, attendance[s.uid] || 'unmarked']);
@@ -124,7 +126,7 @@ function AttendancePage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{classData?.name} — Attendance</h1>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="rounded-lg" onClick={exportCSV}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
-            <Button variant="outline" size="sm" className="rounded-lg" onClick={markAllPresent}>All Present</Button>
+            {!isTA && <Button variant="outline" size="sm" className="rounded-lg" onClick={markAllPresent}>All Present</Button>}
           </div>
         </div>
 
@@ -161,13 +163,13 @@ function AttendancePage() {
                     <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button onClick={() => markAttendance(s.uid, 'present')} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'present' ? 'bg-green-600 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-green-100')}>
+                    <button onClick={() => !isTA && markAttendance(s.uid, 'present')} disabled={isTA} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'present' ? 'bg-green-600 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-green-100', isTA && 'cursor-not-allowed opacity-60')}>
                       <Check className="h-4 w-4" />
                     </button>
-                    <button onClick={() => markAttendance(s.uid, 'tardy')} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'tardy' ? 'bg-amber-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-amber-100')}>
+                    <button onClick={() => !isTA && markAttendance(s.uid, 'tardy')} disabled={isTA} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'tardy' ? 'bg-amber-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-amber-100', isTA && 'cursor-not-allowed opacity-60')}>
                       <Clock className="h-4 w-4" />
                     </button>
-                    <button onClick={() => markAttendance(s.uid, 'absent')} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'absent' ? 'bg-red-600 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-red-100')}>
+                    <button onClick={() => !isTA && markAttendance(s.uid, 'absent')} disabled={isTA} className={cn('h-8 w-8 rounded-lg flex items-center justify-center transition-all', status === 'absent' ? 'bg-red-600 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-red-100', isTA && 'cursor-not-allowed opacity-60')}>
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -180,4 +182,4 @@ function AttendancePage() {
     </>
   );
 }
-export default withAuth(AttendancePage, 'teacher');
+export default withAuth(AttendancePage, ['teacher', 'ta']);

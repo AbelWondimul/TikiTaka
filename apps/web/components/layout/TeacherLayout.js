@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { useAuth } from '@/lib/auth-context';
 import Logo from './Logo';
 import NotificationDropdown from './NotificationDropdown';
+import { useTA } from '@/lib/useTA';
 
 const NAV_ITEMS = [
   { href: '/teacher/dashboard', label: 'Dashboard', key: 'dashboard' },
@@ -20,7 +21,8 @@ const SIDEBAR_ITEMS = [
 ];
 
 export default function TeacherLayout({ children, activePage = 'dashboard' }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const isStudentTA = role === 'student';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
@@ -108,8 +110,8 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
               <span className="material-symbols-outlined">school</span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-teal-800 leading-none">Main Menu</h2>
-              <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">Academic Management</p>
+              <h2 className="text-lg font-bold text-teal-800 leading-none">{isStudentTA ? 'TA Dashboard' : 'Main Menu'}</h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">{isStudentTA ? 'Teaching Assistant' : 'Academic Management'}</p>
             </div>
           </div>
         </div>
@@ -151,11 +153,18 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
             ))}
           </div>
         </nav>
-        <div className="mt-auto pt-4 border-t border-slate-200">
-          <button className="w-full bg-[#005c55] py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
-            <span className="material-symbols-outlined text-lg">add</span>
-            <span>New Class</span>
-          </button>
+        <div className="mt-auto pt-4 border-t border-slate-200 space-y-2">
+          {isStudentTA ? (
+            <Link href="/student/dashboard" className="w-full bg-violet-600 py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-violet-900/10">
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              <span>Back to Student</span>
+            </Link>
+          ) : (
+            <button className="w-full bg-[#005c55] py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
+              <span className="material-symbols-outlined text-lg">add</span>
+              <span>New Class</span>
+            </button>
+          )}
         </div>
       </aside>
 

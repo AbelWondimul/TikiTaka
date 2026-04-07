@@ -123,8 +123,10 @@ service cloud.firestore {
 
       // Teachers can read all knowledge base docs
       // Students can only read docs belonging to a class they are enrolled in
+      // TAs can read docs for classes they TA
       allow read: if isTeacher() ||
-                     (isStudent() && isEnrolledInClass(resource.data.classId));
+                     (isStudent() && isEnrolledInClass(resource.data.classId)) ||
+                     (resource.data.classId is string && isTAofClass(resource.data.classId));
     }
 
     // ─────────────────────────────────────────
@@ -185,6 +187,7 @@ service cloud.firestore {
 
       // Student reads their own attempts
       // Teacher reads all attempts for any class they own
+      // TAs can read attempts for classes they TA
       // Falls back to class ownership for documents that pre-date the teacherId field
       allow read: if isAuthenticated() && (
         resource != null && (
@@ -195,6 +198,8 @@ service cloud.firestore {
             ||
             (resource.data.classId is string && resource.data.classId != '' && isTeacherOfClass(resource.data.classId))
           ))
+          ||
+          (resource.data.classId is string && resource.data.classId != '' && isTAofClass(resource.data.classId))
         )
       );
 
@@ -225,6 +230,7 @@ service cloud.firestore {
 
       // Teacher reads their own assignments.
       // Students read assignments if they are enrolled in the class.
+      // TAs can read assignments for classes they TA.
       allow read: if isAuthenticated() && (
         (isTeacher() && (
           resource.data.teacherId == request.auth.uid ||
@@ -235,6 +241,8 @@ service cloud.firestore {
          resource.data.classId is string &&
          resource.data.classId != '' &&
          isEnrolledInClass(resource.data.classId))
+        ||
+        (resource.data.classId is string && resource.data.classId != '' && isTAofClass(resource.data.classId))
       );
     }
 
@@ -264,6 +272,8 @@ service cloud.firestore {
          resource.data.classId is string &&
          resource.data.classId != '' &&
          isEnrolledInClass(resource.data.classId))
+        ||
+        (resource.data.classId is string && resource.data.classId != '' && isTAofClass(resource.data.classId))
       );
     }
 
@@ -328,7 +338,8 @@ service cloud.firestore {
       allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
       allow read: if isAuthenticated() && (
         (isTeacher() && resource.data.teacherId == request.auth.uid) ||
-        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
     }
 
@@ -341,7 +352,8 @@ service cloud.firestore {
       allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
       allow read: if isAuthenticated() && (
         (isTeacher() && resource.data.teacherId == request.auth.uid) ||
-        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+        (isStudent() && resource.data.classId is string && isEnrolledInClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
     }
 
@@ -354,7 +366,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.studentId == request.auth.uid;
       allow read: if isAuthenticated() && (
         resource.data.studentId == request.auth.uid ||
-        (isTeacher() && resource.data.classId is string && isTeacherOfClass(resource.data.classId))
+        (isTeacher() && resource.data.classId is string && isTeacherOfClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
       allow delete: if false;
     }
@@ -409,7 +422,8 @@ service cloud.firestore {
       allow create, update: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
       allow read: if isAuthenticated() && (
         resource.data.teacherId == request.auth.uid ||
-        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
       allow delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
     }
@@ -423,7 +437,8 @@ service cloud.firestore {
       allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
       allow read: if isAuthenticated() && (
         resource.data.teacherId == request.auth.uid ||
-        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
     }
 
@@ -447,10 +462,11 @@ service cloud.firestore {
       allow create: if isTeacher() && request.resource.data.teacherId == request.auth.uid;
       allow update, delete: if isTeacher() && resource.data.teacherId == request.auth.uid;
 
-      // Teachers read their own; students read if enrolled in the class
+      // Teachers read their own; students read if enrolled in the class; TAs read for their classes
       allow read: if isAuthenticated() && (
         resource.data.teacherId == request.auth.uid ||
-        (resource.data.classId is string && isEnrolledInClass(resource.data.classId))
+        (resource.data.classId is string && isEnrolledInClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
       );
     }
 

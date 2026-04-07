@@ -13,6 +13,7 @@ import {
 
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
+import { getAccessibleClasses } from '@/lib/classUtils';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
 import { getRelativeTime } from '@/lib/dateUtils';
@@ -47,7 +48,7 @@ import {
 } from 'lucide-react';
 
 function TeacherSubmissions() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
 
   const [classes, setClasses] = useState([]);
@@ -66,11 +67,8 @@ function TeacherSubmissions() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch all classes
-      const classesQ = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
-      const classesSnap = await getDocs(classesQ);
-      const cls = [];
-      classesSnap.forEach(d => cls.push({ id: d.id, ...d.data() }));
+      // 1. Fetch all classes (owned + TA)
+      const cls = await getAccessibleClasses(user.uid, role);
       setClasses(cls);
 
       // 2. Fetch all assignments across classes
@@ -85,11 +83,22 @@ function TeacherSubmissions() {
       allAssignments.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setAssignments(allAssignments);
 
-      // 3. Fetch all grading jobs
+      // 3. Fetch all grading jobs (owned + TA classes)
+      const taClassIds = cls.filter(c => c._isTA).map(c => c.id);
+      const jobs = [];
+      const seenJobIds = new Set();
+
       const jobsQ = query(collection(db, 'gradingJobs'), where('teacherId', '==', user.uid));
       const jobsSnap = await getDocs(jobsQ);
-      const jobs = [];
-      jobsSnap.forEach(d => jobs.push({ id: d.id, ...d.data() }));
+      jobsSnap.forEach(d => { jobs.push({ id: d.id, ...d.data() }); seenJobIds.add(d.id); });
+
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taSnap = await getDocs(query(collection(db, 'gradingJobs'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taSnap.forEach(d => { if (!seenJobIds.has(d.id)) { jobs.push({ id: d.id, ...d.data() }); seenJobIds.add(d.id); } });
+        }
+      }
+
       setGradingJobs(jobs);
 
       // 4. Fetch student profiles for all enrolled students
@@ -375,4 +384,4 @@ function TeacherSubmissions() {
   );
 }
 
-export default withAuth(TeacherSubmissions, 'teacher');
+export default withAuth(TeacherSubmissions, ['teacher', 'ta']);

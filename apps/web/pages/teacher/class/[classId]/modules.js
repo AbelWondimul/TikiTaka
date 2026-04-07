@@ -86,16 +86,22 @@ function TeacherModules() {
     setIsLoading(true);
     try {
       const classDoc = await getDoc(doc(db, 'classes', classId));
-      if (classDoc.exists()) setClassData({ id: classDoc.id, ...classDoc.data() });
+      const cls = classDoc.exists() ? { id: classDoc.id, ...classDoc.data() } : null;
+      if (cls) setClassData(cls);
 
-      const modsQ = query(collection(db, 'modules'), where('classId', '==', classId), where('teacherId', '==', user.uid));
+      const isTA = cls && (cls.taIds || []).includes(user.uid);
+      const modsQ = isTA
+        ? query(collection(db, 'modules'), where('classId', '==', classId))
+        : query(collection(db, 'modules'), where('classId', '==', classId), where('teacherId', '==', user.uid));
       const modsSnap = await getDocs(modsQ);
       const mods = [];
       modsSnap.forEach(d => mods.push({ id: d.id, ...d.data() }));
       mods.sort((a, b) => (a.weekNumber || 0) - (b.weekNumber || 0));
       setModules(mods);
 
-      const resQ = query(collection(db, 'moduleResources'), where('classId', '==', classId), where('teacherId', '==', user.uid));
+      const resQ = isTA
+        ? query(collection(db, 'moduleResources'), where('classId', '==', classId))
+        : query(collection(db, 'moduleResources'), where('classId', '==', classId), where('teacherId', '==', user.uid));
       const resSnap = await getDocs(resQ);
       const res = [];
       resSnap.forEach(d => res.push({ id: d.id, ...d.data() }));
@@ -110,7 +116,9 @@ function TeacherModules() {
       setClassAssignments(assigns);
 
       // Fetch quizzes for prerequisite options
-      const quizQ = query(collection(db, 'quizzes'), where('classId', '==', classId), where('teacherId', '==', user.uid));
+      const quizQ = isTA
+        ? query(collection(db, 'quizzes'), where('classId', '==', classId))
+        : query(collection(db, 'quizzes'), where('classId', '==', classId), where('teacherId', '==', user.uid));
       const quizSnap = await getDocs(quizQ);
       const quizzes = [];
       quizSnap.forEach(d => quizzes.push({ id: d.id, ...d.data() }));
@@ -304,6 +312,8 @@ function TeacherModules() {
 
   const getResourcesForModule = (moduleId) => resources.filter(r => r.moduleId === moduleId);
 
+  const isTA = classData && (classData.taIds || []).includes(user.uid);
+
   return (
     <>
       <Head>
@@ -321,10 +331,12 @@ function TeacherModules() {
               <h1 className="text-2xl font-bold tracking-tight">{classData?.name || 'Class'} — Weekly Modules</h1>
               <p className="text-sm text-muted-foreground mt-1">Organize resources by week. Choose what students see vs. what helps AI grading.</p>
             </div>
-            <Button onClick={handleAddModule} disabled={isAddingModule} className="rounded-xl">
-              {isAddingModule ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              Add Week
-            </Button>
+            {!isTA && (
+              <Button onClick={handleAddModule} disabled={isAddingModule} className="rounded-xl">
+                {isAddingModule ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                Add Week
+              </Button>
+            )}
           </div>
         </div>
 
@@ -356,18 +368,22 @@ function TeacherModules() {
                         <span className="text-sm font-bold text-primary">{mod.weekNumber || '?'}</span>
                       </div>
                       <div>
-                        <input
-                          className="text-base font-bold bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
-                          value={mod.title}
-                          onChange={(e) => setModules(prev => prev.map(m => m.id === mod.id ? { ...m, title: e.target.value } : m))}
-                          onBlur={(e) => handleRenameModule(mod.id, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        {isTA ? (
+                          <p className="text-base font-bold">{mod.title}</p>
+                        ) : (
+                          <input
+                            className="text-base font-bold bg-transparent border-none outline-none focus:ring-0 p-0 w-full"
+                            value={mod.title}
+                            onChange={(e) => setModules(prev => prev.map(m => m.id === mod.id ? { ...m, title: e.target.value } : m))}
+                            onBlur={(e) => handleRenameModule(mod.id, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
                         <p className="text-xs text-muted-foreground">{modResources.length} resource{modResources.length !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {deleteModuleId === mod.id ? (
+                      {!isTA && (deleteModuleId === mod.id ? (
                         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                           <Button size="sm" variant="destructive" className="h-7 text-xs rounded-lg" onClick={() => handleDeleteModule(mod.id)}>Delete</Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg" onClick={() => setDeleteModuleId(null)}>Cancel</Button>
@@ -380,7 +396,7 @@ function TeacherModules() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      )}
+                      ))}
                       <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
                     </div>
                   </div>
@@ -416,15 +432,17 @@ function TeacherModules() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground" title="Toggle student visibility" onClick={() => handleToggleVisibility(r)}>
-                                    {r.studentVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                  </Button>
+                                  {!isTA && (
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground" title="Toggle student visibility" onClick={() => handleToggleVisibility(r)}>
+                                      {r.studentVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                    </Button>
+                                  )}
                                   {r.url && (
                                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground" onClick={() => window.open(r.url, '_blank')}>
                                       <ExternalLink className="h-3.5 w-3.5" />
                                     </Button>
                                   )}
-                                  {deleteResourceId === r.id ? (
+                                  {!isTA && (deleteResourceId === r.id ? (
                                     <div className="flex gap-1">
                                       <Button size="sm" variant="destructive" className="h-6 text-[10px] rounded px-1.5" onClick={() => handleDeleteResource(r)}>Yes</Button>
                                       <Button size="sm" variant="ghost" className="h-6 text-[10px] rounded px-1.5" onClick={() => setDeleteResourceId(null)}>No</Button>
@@ -433,7 +451,7 @@ function TeacherModules() {
                                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteResourceId(r.id)}>
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </Button>
-                                  )}
+                                  ))}
                                 </div>
                               </div>
                             );
@@ -445,9 +463,11 @@ function TeacherModules() {
                       <div className="space-y-2 pt-2 border-t border-border/30">
                         <div className="flex items-center justify-between">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prerequisites</p>
-                          <Button variant="ghost" size="sm" className="h-6 text-[10px] rounded-md px-2 text-primary" onClick={() => openPrereqDialog(mod.id)}>
-                            <Plus className="h-3 w-3 mr-1" /> Add Rule
-                          </Button>
+                          {!isTA && (
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] rounded-md px-2 text-primary" onClick={() => openPrereqDialog(mod.id)}>
+                              <Plus className="h-3 w-3 mr-1" /> Add Rule
+                            </Button>
+                          )}
                         </div>
                         {(!mod.prerequisites || mod.prerequisites.length === 0) ? (
                           <p className="text-[10px] text-muted-foreground italic">No prerequisites — this module is open to all students.</p>
@@ -463,20 +483,24 @@ function TeacherModules() {
                                     {prereq.type === 'assignment_completed' && `Submit "${prereq.assignmentTitle}"`}
                                   </span>
                                 </div>
-                                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleRemovePrereq(mod.id, idx)}>
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+                                {!isTA && (
+                                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleRemovePrereq(mod.id, idx)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
 
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1 rounded-xl text-xs" onClick={() => openAddResourceDialog(mod.id)}>
-                          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
-                        </Button>
-                      </div>
+                      {!isTA && (
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1 rounded-xl text-xs" onClick={() => openAddResourceDialog(mod.id)}>
+                            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -631,4 +655,4 @@ function TeacherModules() {
   );
 }
 
-export default withAuth(TeacherModules, 'teacher');
+export default withAuth(TeacherModules, ['teacher', 'ta']);

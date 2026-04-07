@@ -13,6 +13,7 @@ import {
 
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
+import { getAccessibleClasses } from '@/lib/classUtils';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
 import { cn } from '@/lib/utils';
@@ -64,7 +65,7 @@ function formatTime(t) {
 }
 
 function TeacherSchedule() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [classes, setClasses] = useState([]);
   const [scheduleBlocks, setScheduleBlocks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,18 +93,26 @@ function TeacherSchedule() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch teacher's classes
-      const classesQ = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
-      const classesSnap = await getDocs(classesQ);
-      const cls = [];
-      classesSnap.forEach(d => cls.push({ id: d.id, ...d.data() }));
+      // Fetch accessible classes (owned + TA)
+      const cls = await getAccessibleClasses(user.uid, role);
       setClasses(cls);
 
-      // Fetch schedule blocks
+      // Fetch schedule blocks (owned + TA classes)
+      const taClassIds = cls.filter(c => c._isTA).map(c => c.id);
+      const blocks = [];
+      const seenBlockIds = new Set();
+
       const schedQ = query(collection(db, 'schedules'), where('teacherId', '==', user.uid));
       const schedSnap = await getDocs(schedQ);
-      const blocks = [];
-      schedSnap.forEach(d => blocks.push({ id: d.id, ...d.data() }));
+      schedSnap.forEach(d => { blocks.push({ id: d.id, ...d.data() }); seenBlockIds.add(d.id); });
+
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taSnap = await getDocs(query(collection(db, 'schedules'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taSnap.forEach(d => { if (!seenBlockIds.has(d.id)) { blocks.push({ id: d.id, ...d.data() }); seenBlockIds.add(d.id); } });
+        }
+      }
+
       setScheduleBlocks(blocks);
     } catch (err) {
       console.error('Error fetching schedule:', err);
@@ -433,4 +442,4 @@ function TeacherSchedule() {
   );
 }
 
-export default withAuth(TeacherSchedule, 'teacher');
+export default withAuth(TeacherSchedule, ['teacher', 'ta']);

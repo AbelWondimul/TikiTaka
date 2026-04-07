@@ -8,7 +8,7 @@ import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
-import { generateClassCode } from '@/lib/classUtils';
+import { generateClassCode, getAccessibleClasses } from '@/lib/classUtils';
 import { getRelativeTime } from '@/lib/dateUtils';
 
 // Convert user's name format to "Good morning, Professor [Lastname]"
@@ -28,7 +28,7 @@ const getGreeting = (displayName) => {
 };
 
 function TeacherDashboard() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const [classes, setClasses] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
@@ -164,18 +164,30 @@ function TeacherDashboard() {
     try {
       setIsLoading(true);
       
-      // Fetch Classes
-      const classesQ = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
-      const classesSnap = await getDocs(classesQ);
-      const fetchedClasses = [];
-      classesSnap.forEach(doc => fetchedClasses.push({ id: doc.id, ...doc.data() }));
+      // Fetch Classes (owned + TA)
+      const fetchedClasses = await getAccessibleClasses(user.uid, role);
       setClasses(fetchedClasses);
 
       // Fetch Recent Submissions (gradingJobs)
-      const subsQ = query(collection(db, 'gradingJobs'), where('teacherId', '==', user.uid));
-      const subsSnap = await getDocs(subsQ);
+      // For owned classes query by teacherId, for TA classes query by classId
+      const taClassIds = fetchedClasses.filter(c => c._isTA).map(c => c.id);
+      const queries = [query(collection(db, 'gradingJobs'), where('teacherId', '==', user.uid))];
+      if (taClassIds.length > 0) {
+        // Firestore 'in' supports up to 30 items
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          queries.push(query(collection(db, 'gradingJobs'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+        }
+      }
+      const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+      const seenIds = new Set();
+      const subsSnap = { docs: [] };
+      for (const snap of snapshots) {
+        snap.forEach(d => {
+          if (!seenIds.has(d.id)) { seenIds.add(d.id); subsSnap.docs.push(d); }
+        });
+      }
       let subs = [];
-      subsSnap.forEach(doc => subs.push({ id: doc.id, ...doc.data() }));
+      subsSnap.docs.forEach(doc => subs.push({ id: doc.id, ...doc.data() }));
 
       subs.sort((a, b) => {
         const da = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
@@ -193,10 +205,17 @@ function TeacherDashboard() {
         setAvgScore(null);
       }
 
-      // Fetch quizzes across all teacher's classes
-      const quizzesQ = query(collection(db, 'quizzes'), where('teacherId', '==', user.uid));
-      const quizzesSnap = await getDocs(quizzesQ);
-      setQuizCount(quizzesSnap.size);
+      // Fetch quizzes across all accessible classes
+      let quizTotal = 0;
+      const quizzesSnap1 = await getDocs(query(collection(db, 'quizzes'), where('teacherId', '==', user.uid)));
+      quizTotal += quizzesSnap1.size;
+      if (taClassIds.length > 0) {
+        for (let i = 0; i < taClassIds.length; i += 30) {
+          const taQuizSnap = await getDocs(query(collection(db, 'quizzes'), where('classId', 'in', taClassIds.slice(i, i + 30))));
+          taQuizSnap.forEach(d => { if (!seenIds.has('quiz_' + d.id)) { seenIds.add('quiz_' + d.id); quizTotal++; } });
+        }
+      }
+      setQuizCount(quizTotal);
       
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -219,7 +238,7 @@ function TeacherDashboard() {
       </Head>
         {/* Header Section */}
         <header className="mb-10">
-          <h1 className="text-[28px] font-bold text-[#191c1d] tracking-tight">{getGreeting(user?.displayName)}</h1>
+          <h1 className="text-[28px] font-bold text-[#191c1d] tracking-tight">{role === 'student' ? `Welcome back, ${user?.displayName?.split(' ')[0] || 'TA'}` : getGreeting(user?.displayName)}</h1>
           <p className="text-sm font-normal text-slate-500 mt-1">You have {displayPendingCount} pending submission{displayPendingCount !== 1 ? 's' : ''} to review today.</p>
         </header>
 
@@ -290,15 +309,21 @@ function TeacherDashboard() {
                 classes.filter(c => !c.archived).map((c) => (
                   <div key={c.id} className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col relative">
                     <div className="flex justify-between items-start mb-4">
-                      <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
-                        {(c.name || 'CLASS').substring(0, 5)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
+                          {(c.name || 'CLASS').substring(0, 5)}
+                        </span>
+                        {c._isTA && (
+                          <span className="bg-violet-100 text-violet-700 px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase">TA</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <span
                           className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-teal-600 transition-colors text-[20px]"
                           title="Analytics"
                           onClick={() => router.push(`/teacher/class/${c.id}/analytics`)}
                         >bar_chart</span>
+                        {!c._isTA && (
                         <div className="relative" ref={openMenuId === c.id ? menuRef : null}>
                           <span
                             className="material-symbols-outlined text-slate-300 cursor-pointer hover:text-slate-500"
@@ -353,6 +378,7 @@ function TeacherDashboard() {
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     </div>
 
@@ -478,4 +504,4 @@ function TeacherDashboard() {
   );
 }
 
-export default withAuth(TeacherDashboard, 'teacher');
+export default withAuth(TeacherDashboard, ['teacher', 'ta']);

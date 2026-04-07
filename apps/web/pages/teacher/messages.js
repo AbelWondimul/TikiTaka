@@ -18,6 +18,7 @@ import {
 
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
+import { getAccessibleClasses } from '@/lib/classUtils';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, MessageSquare, Send, ArrowLeft, Inbox, Plus, Users, ChevronRight } from 'lucide-react';
 
 function TeacherMessages() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const hasAutoOpenedRef = useRef(false);
 
@@ -59,20 +60,55 @@ function TeacherMessages() {
     if (!user) return;
     setIsLoadingConvs(true);
 
-    const q = query(
-      collection(db, 'conversations'),
-      where('teacherId', '==', user.uid),
-      orderBy('updatedAt', 'desc')
-    );
+    // Fetch accessible classes to get TA class IDs
+    const fetchConversations = async () => {
+      const accessibleClasses = await getAccessibleClasses(user.uid, role);
+      const taClassIds = accessibleClasses.filter(c => c._isTA).map(c => c.id);
 
-    convUnsubRef.current = onSnapshot(q, (snap) => {
-      const convs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setConversations(convs);
-      setIsLoadingConvs(false);
-    }, (err) => {
-      console.error('Error loading conversations:', err);
-      setIsLoadingConvs(false);
-    });
+      const q = query(
+        collection(db, 'conversations'),
+        where('teacherId', '==', user.uid),
+        orderBy('updatedAt', 'desc')
+      );
+
+      convUnsubRef.current = onSnapshot(q, (snap) => {
+        const convs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const seenIds = new Set(convs.map(c => c.id));
+
+        // Also listen for TA class conversations
+        if (taClassIds.length > 0) {
+          for (let i = 0; i < taClassIds.length; i += 30) {
+            const taQ = query(
+              collection(db, 'conversations'),
+              where('classId', 'in', taClassIds.slice(i, i + 30)),
+              orderBy('updatedAt', 'desc')
+            );
+            onSnapshot(taQ, (taSnap) => {
+              const taConvs = taSnap.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .filter(c => !seenIds.has(c.id));
+              if (taConvs.length > 0) {
+                setConversations(prev => {
+                  const merged = [...prev];
+                  const mergedIds = new Set(merged.map(c => c.id));
+                  taConvs.forEach(c => { if (!mergedIds.has(c.id)) merged.push(c); });
+                  merged.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
+                  return merged;
+                });
+              }
+            });
+          }
+        }
+
+        setConversations(convs);
+        setIsLoadingConvs(false);
+      }, (err) => {
+        console.error('Error loading conversations:', err);
+        setIsLoadingConvs(false);
+      });
+    };
+
+    fetchConversations();
 
     return () => { if (convUnsubRef.current) convUnsubRef.current(); };
   }, [user]);
@@ -204,9 +240,8 @@ function TeacherMessages() {
     setIsLoadingClasses(true);
 
     try {
-      const q = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
-      const snap = await getDocs(q);
-      setClasses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const accessibleClasses = await getAccessibleClasses(user.uid, role);
+      setClasses(accessibleClasses);
     } catch (err) {
       console.error('Error loading classes:', err);
     } finally {
@@ -559,4 +594,4 @@ function TeacherMessages() {
   );
 }
 
-export default withAuth(TeacherMessages, 'teacher');
+export default withAuth(TeacherMessages, ['teacher', 'ta']);
