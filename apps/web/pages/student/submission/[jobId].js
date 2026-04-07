@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -113,16 +113,31 @@ function SubmissionDetail() {
   const handleRequestRegrade = async () => {
     if (!job) return;
     setIsUpdating(true);
+    setError(null);
     try {
       const jobRef = doc(db, 'gradingJobs', job.id);
       await updateDoc(jobRef, {
         status: 'disputed',
-        appealReason: 'Re-grade requested',
+        appealReason: appealReason.trim() || 'Re-grade requested',
         appealedAt: serverTimestamp(),
       });
+
+      // Send notification to teacher
+      if (job.teacherId) {
+        await addDoc(collection(db, 'notifications'), {
+          senderId: user.uid,
+          recipientId: job.teacherId,
+          notifType: 'appeal',
+          title: `Grade Appeal: ${job.assignmentTitle || 'Assignment'}`,
+          message: `${user.displayName || user.email} is requesting a re-grade.${appealReason.trim() ? ` Reason: "${appealReason.trim()}"` : ''}`,
+          href: `/teacher/homework/${job.assignmentId}/submissions/${job.id}`,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (err) {
       console.error("Failed to request re-grade:", err);
-      setError("Failed to submit request.");
+      setError("Failed to submit request. Please try again.");
     } finally {
       setIsUpdating(false);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -12,7 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Edit3, FileType } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, CheckCircle, Edit3, FileType, MessageSquare, RotateCcw, X } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import dynamic from 'next/dynamic';
 
 const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
@@ -38,6 +39,41 @@ function TeacherSubmissionReview() {
   const [overridePoints, setOverridePoints] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [error, setError] = useState(null);
+  const [appealResponse, setAppealResponse] = useState('');
+  const [isRespondingAppeal, setIsRespondingAppeal] = useState(false);
+
+  const handleAcceptAppeal = async () => {
+    if (!submission) return;
+    setIsRespondingAppeal(true);
+    try {
+      // Re-queue for grading
+      await updateDoc(doc(db, 'gradingJobs', submissionId), {
+        status: 'queued',
+        appealResponse: appealResponse.trim() || 'Re-grade approved by teacher.',
+        appealRespondedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Error accepting appeal:', err);
+    } finally {
+      setIsRespondingAppeal(false);
+    }
+  };
+
+  const handleDeclineAppeal = async () => {
+    if (!submission) return;
+    setIsRespondingAppeal(true);
+    try {
+      await updateDoc(doc(db, 'gradingJobs', submissionId), {
+        status: 'complete',
+        appealResponse: appealResponse.trim() || 'Appeal declined. Grade stands.',
+        appealRespondedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Error declining appeal:', err);
+    } finally {
+      setIsRespondingAppeal(false);
+    }
+  };
 
   useEffect(() => {
     if (!submissionId || !user) return;
@@ -123,6 +159,61 @@ function TeacherSubmissionReview() {
                <AlertTriangle className="w-4 h-4 mr-2" />
                <AlertDescription className="font-medium">Edge Cases Detected: Verify difficult to read sections below.</AlertDescription>
              </Alert>
+          )}
+
+          {/* Appeal Banner */}
+          {submission.status === 'disputed' && (
+            <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 rounded-xl overflow-hidden">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                  <MessageSquare className="h-5 w-5" />
+                  Grade Appeal from Student
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {submission.appealReason && (
+                  <div className="bg-white dark:bg-background rounded-lg p-3 border">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Student's reason:</p>
+                    <p className="text-sm">{submission.appealReason}</p>
+                  </div>
+                )}
+                <Textarea
+                  value={appealResponse}
+                  onChange={(e) => setAppealResponse(e.target.value)}
+                  placeholder="Optional response to student..."
+                  className="rounded-lg min-h-[60px] text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleAcceptAppeal}
+                    disabled={isRespondingAppeal}
+                    className="bg-green-600 hover:bg-green-700 text-white rounded-lg flex-1"
+                  >
+                    {isRespondingAppeal ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    Accept & Re-grade
+                  </Button>
+                  <Button
+                    onClick={handleDeclineAppeal}
+                    disabled={isRespondingAppeal}
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:bg-red-50 rounded-lg flex-1"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Decline
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Appeal Response (if already responded) */}
+          {submission.appealResponse && submission.status !== 'disputed' && (
+            <Alert className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300 rounded-xl">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              <AlertDescription>
+                <span className="font-semibold">Appeal resolved:</span> {submission.appealResponse}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Text submission display */}
