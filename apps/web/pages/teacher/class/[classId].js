@@ -2209,7 +2209,7 @@ function TeacherClassPage() {
                   return (
                     <div key={sa.id} className="flex items-center justify-between p-2 rounded-lg border bg-muted/30 text-xs">
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-foreground" dangerouslySetInnerHTML={{ __html: sa.message }} />
+                        <p className="truncate text-foreground">{(sa.message || '').replace(/<[^>]+>/g, '').slice(0, 100)}</p>
                         <p className="text-muted-foreground mt-0.5">
                           <CalendarClock className="h-3 w-3 inline mr-1" />
                           {scheduledDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}

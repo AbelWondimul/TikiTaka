@@ -236,16 +236,9 @@ function StudentDashboard() {
         );
         const assignmentsSnap = await getDocs(assignmentsQ);
         
-        // Also fetch user's gradingJobs to filter out completed ones
-        const jobsQ = query(collection(db, 'gradingJobs'), where('studentId', '==', user.uid));
-        const jobsSnap = await getDocs(jobsQ);
-        const submittedAssignmentIds = jobsSnap.docs.map(d => d.data().assignmentId || d.data().rawPdfUrl /* temp fallback if string matched */);
-
         const loadedAssignments = [];
         assignmentsSnap.forEach(docSnap => {
-          const dat = docSnap.data();
-          // Ideally check if this assignmentId has already a grading job linked to it.
-          loadedAssignments.push({ id: docSnap.id, ...dat });
+          loadedAssignments.push({ id: docSnap.id, ...docSnap.data() });
         });
         
         // Sort by dueDate

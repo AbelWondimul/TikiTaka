@@ -57,6 +57,22 @@ export async function getClassByCode(classCode) {
 }
 
 /**
+ * Fetches classes where the user is enrolled as a student.
+ * @param {string} uid - The student's UID.
+ * @returns {Promise<Object[]>} Array of class objects.
+ */
+export async function getStudentClasses(uid) {
+  try {
+    const q = query(collection(db, 'classes'), where('studentIds', 'array-contains', uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.error("Error fetching student classes:", error);
+    return [];
+  }
+}
+
+/**
  * Fetches classes where the user is a TA.
  * @param {string} uid - The user's UID.
  * @returns {Promise<Object[]>} Array of class objects with `_isTA: true`.
