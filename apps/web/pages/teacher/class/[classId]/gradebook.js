@@ -16,8 +16,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
 import {
-  Loader2, ArrowLeft, Download, Save, CheckCircle, AlertTriangle
+  Loader2, ArrowLeft, Download, Save, CheckCircle, AlertTriangle, FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 function GradebookPage() {
   const router = useRouter();
@@ -245,8 +246,8 @@ function GradebookPage() {
     }
   };
 
-  // CSV export
-  const handleExportCSV = () => {
+  // Build export rows (shared by CSV and XLSX)
+  const buildExportRows = () => {
     const headers = ['Student', 'Email', ...assignments.map(a => a.title || 'Untitled')];
     if (attendanceData) headers.push('Attendance %');
     headers.push('Overall %', 'Letter');
@@ -256,23 +257,60 @@ function GradebookPage() {
       const row = [s.displayName || '', s.email || ''];
       for (const a of assignments) {
         const job = getJob(s.uid, a.id);
-        row.push(job?.score != null ? String(job.score) : '');
+        row.push(job?.score != null ? job.score : '');
       }
-      if (attendanceData) row.push(String(attendanceData[s.uid] ?? ''));
+      if (attendanceData) row.push(attendanceData[s.uid] ?? '');
       const overall = calcOverall(s.uid);
-      row.push(overall != null ? String(overall) : '');
+      row.push(overall != null ? overall : '');
       row.push(overall != null ? getLetterGrade(overall) : '');
       rows.push(row);
     }
+    return rows;
+  };
 
+  const fileName = (classData?.name || 'gradebook').replace(/[^a-z0-9]/gi, '_') + '_gradebook';
+
+  // CSV export
+  const handleExportCSV = () => {
+    const rows = buildExportRows();
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(classData?.name || 'gradebook').replace(/[^a-z0-9]/gi, '_')}_gradebook.csv`;
+    a.download = `${fileName}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // XLSX export with auto-fitted column widths
+  const handleExportXLSX = () => {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Auto-fit column widths
+    const colWidths = rows[0].map((_, colIdx) => {
+      let maxLen = 0;
+      for (const row of rows) {
+        const val = String(row[colIdx] ?? '');
+        maxLen = Math.max(maxLen, val.length);
+      }
+      return { wch: Math.min(Math.max(maxLen + 2, 8), 40) };
+    });
+    ws['!cols'] = colWidths;
+
+    // Bold header row
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[addr]) {
+        ws[addr].s = { font: { bold: true } };
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Gradebook');
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
   };
 
   // Sorted students
@@ -308,8 +346,11 @@ function GradebookPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={handleExportXLSX}>
+              <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Excel
+            </Button>
             <Button variant="outline" size="sm" className="rounded-xl" onClick={handleExportCSV}>
-              <Download className="h-4 w-4 mr-1.5" /> Export CSV
+              <Download className="h-4 w-4 mr-1.5" /> CSV
             </Button>
           </div>
         </div>
