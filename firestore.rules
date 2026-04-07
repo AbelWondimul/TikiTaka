@@ -482,8 +482,8 @@ service cloud.firestore {
         request.resource.data.title.size() <= 200 &&
         request.resource.data.recipientId is string;
 
-      // Only the recipient can read or update (mark as read) their notifications
-      allow read: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
+      // The recipient can read their notifications; the sender can read their own sent notifications
+      allow read: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || resource.data.senderId == request.auth.uid);
       allow update: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
 
       // Only the recipient can delete their notifications
