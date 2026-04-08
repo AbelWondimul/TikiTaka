@@ -145,7 +145,8 @@ export default function LiquidMetalHero({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Button 
+              {/* @ts-ignore - Button JS component lacks TS types */}
+              <Button
                 onClick={onPrimaryCtaClick}
                 size="lg"
                 className="bg-foreground text-background hover:bg-foreground/90 transition-all duration-300 shadow-2xl text-lg px-8 py-6 font-semibold"
@@ -159,7 +160,8 @@ export default function LiquidMetalHero({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <Button 
+                {/* @ts-ignore - Button JS component lacks TS types */}
+                <Button
                   onClick={onSecondaryCtaClick}
                   variant="outline"
                   size="lg"
