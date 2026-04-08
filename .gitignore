@@ -43,6 +43,7 @@ pip-delete-this-directory.txt
 # Claude
 CLAUDE.md
 .claude/
+.claude.json
 
 # Playwright test artifacts
 .playwright-mcp/

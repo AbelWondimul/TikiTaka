@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import Header from '@/components/layout/Header';
 import { getClassByCode } from '@/lib/classUtils';
+import { getRelativeTime } from '@/lib/dateUtils';
 import { useTA } from '@/lib/useTA';
 
 import { Button } from '@/components/ui/button';
@@ -46,18 +47,6 @@ const CLASS_ICON_COLORS = [
 ];
 
 const CLASS_ICONS = [FlaskConical, Sigma, Brain, BookOpen];
-
-function formatRelativeDate(date) {
-  if (!date) return 'N/A';
-  const d = date?.toDate ? date.toDate() : new Date(date);
-  const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 function formatDueDate(date) {
   if (!date) return null;
@@ -638,7 +627,7 @@ function StudentDashboard() {
                             {isGraded ? 'GRADED' : 'PENDING'}
                           </Badge>
                           <span className="text-xs font-medium text-muted-foreground">
-                            {formatRelativeDate(job.submittedAt)}
+                            {getRelativeTime(job.submittedAt)}
                           </span>
                         </div>
                         <h3 className="text-base font-semibold leading-tight mb-auto group-hover:text-primary transition-colors">

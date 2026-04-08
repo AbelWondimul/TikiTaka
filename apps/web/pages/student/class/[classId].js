@@ -36,7 +36,7 @@ import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Clock, BookOpen, ChevronDown, MessageCircleQuestion, CalendarPlus, Ticket, Calculator, TrendingUp, Save, FileType } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Clock, BookOpen, ChevronDown, MessageCircleQuestion, CalendarPlus, Ticket, Calculator, TrendingUp, Save } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
