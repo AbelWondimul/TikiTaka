@@ -89,9 +89,6 @@
         "firebase-debug.*.log",
         "*.local"
       ],
-      "predeploy": [
-        "cd functions/grading && python -m venv venv && python -c \"import subprocess,sys,os; pip=os.path.join('venv','Scripts','pip') if os.name=='nt' else os.path.join('venv','bin','pip'); subprocess.check_call([pip,'install','-r','requirements.txt'])\""
-      ],
       "runtime": "python311"
     },
     {
