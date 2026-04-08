@@ -83,6 +83,31 @@
         { "fieldPath": "teacherId", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "sentEmails",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "sentAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledAnnouncements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teacherId", "order": "ASCENDING" },
+        { "fieldPath": "classId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledFor", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
