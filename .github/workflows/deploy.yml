@@ -19,17 +19,26 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install Grading Function Dependencies
+        working-directory: functions/grading
         run: |
-          cd functions/grading
           python3.11 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
+          echo "Venv contents:"
+          ls -la venv/
+          ls -la venv/lib/
+
+      - name: Verify venv exists
+        run: |
+          echo "Checking functions/grading/venv..."
+          ls -la functions/grading/venv/bin/python* || echo "No python in venv!"
+          functions/grading/venv/bin/python --version || echo "Cannot run venv python!"
 
       - name: Install Next.js Dependencies
         run: cd apps/web && npm install
@@ -52,7 +61,11 @@ jobs:
 
       - name: Deploy to Firebase
         run: |
+          echo "Verifying venv before deploy..."
+          ls functions/grading/venv/bin/ | head -10
           source functions/grading/venv/bin/activate
+          which python
+          python --version
           firebase deploy --only hosting,functions --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
