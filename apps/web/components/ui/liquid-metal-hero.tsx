@@ -1,3 +1,4 @@
+// @ts-nocheck — JS UI components (Button, Card, Badge) lack TypeScript definitions
 "use client";
 
 import dynamic from 'next/dynamic';
@@ -145,7 +146,6 @@ export default function LiquidMetalHero({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              {/* @ts-ignore - Button JS component lacks TS types */}
               <Button
                 onClick={onPrimaryCtaClick}
                 size="lg"
