@@ -69,11 +69,11 @@ def _init_genai():
 
 # Adjust function configuration
 # timeoutSeconds: 540
-# memory: 2GiB
+# memory: 1GiB (reduced from 2GiB to lower Cloud Run costs)
 @firestore_fn.on_document_written(
     document="gradingJobs/{jobId}",
     timeout_sec=540,
-    memory=options.MemoryOption.GB_2,
+    memory=options.MemoryOption.GB_1,
     secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot | None]]) -> None:
