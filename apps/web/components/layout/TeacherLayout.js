@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useAuth } from '@/lib/auth-context';
 import Logo from './Logo';
 import NotificationDropdown from './NotificationDropdown';
 import { useTA } from '@/lib/useTA';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/firebase';
+import { generateClassCode } from '@/lib/classUtils';
 
 const NAV_ITEMS = [
   { href: '/teacher/dashboard', label: 'Dashboard', key: 'dashboard' },
@@ -22,9 +26,31 @@ const SIDEBAR_ITEMS = [
 
 export default function TeacherLayout({ children, activePage = 'dashboard' }) {
   const { user, role } = useAuth();
+  const router = useRouter();
   const isStudentTA = role === 'student';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
+
+  const handleCreateClass = async () => {
+    if (isCreatingClass) return;
+    setIsCreatingClass(true);
+    try {
+      const classCode = generateClassCode();
+      const newClass = await addDoc(collection(db, 'classes'), {
+        teacherId: user.uid,
+        name: 'New Class',
+        classCode,
+        studentIds: [],
+        createdAt: serverTimestamp(),
+      });
+      router.push(`/teacher/class/${newClass.id}`);
+    } catch (err) {
+      console.error('Error creating class:', err);
+    } finally {
+      setIsCreatingClass(false);
+    }
+  };
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -80,7 +106,7 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
               }}
             >{isDark ? 'light_mode' : 'dark_mode'}</button>
             <NotificationDropdown variant="material" />
-            <span className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors hidden sm:block">help</span>
+            <a href="mailto:support@tikitaka.ai" title="Contact Support" className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors hidden sm:block">help</a>
             <div className="h-8 w-8 rounded-full overflow-hidden bg-muted border border-border">
               {user?.photoURL ? (
                 <img className="w-full h-full object-cover" src={user.photoURL} alt="Profile" />
@@ -159,9 +185,13 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
               <span>Back to Student</span>
             </Link>
           ) : (
-            <button className="w-full bg-primary py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10">
-              <span className="material-symbols-outlined text-lg">add</span>
-              <span>New Class</span>
+            <button
+              onClick={handleCreateClass}
+              disabled={isCreatingClass}
+              className="w-full bg-primary py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-lg">{isCreatingClass ? 'hourglass_empty' : 'add'}</span>
+              <span>{isCreatingClass ? 'Creating...' : 'New Class'}</span>
             </button>
           )}
         </div>

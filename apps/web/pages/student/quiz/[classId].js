@@ -494,21 +494,21 @@ function StudentQuiz() {
                   </div>
                   <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
                     {[
-                      { name: 'Overview', icon: 'dashboard' },
-                      { name: 'Classes', icon: 'school' },
-                      { name: 'Quizzes', icon: 'quiz' },
-                      { name: 'Submissions', icon: 'assignment' },
-                      { name: 'Students', icon: 'group' },
+                      { name: 'Dashboard', icon: 'dashboard', href: '/student/dashboard' },
+                      { name: 'Submissions', icon: 'assignment', href: '/student/submissions' },
+                      { name: 'Quizzes', icon: 'quiz', href: '/student/quizzes' },
+                      { name: 'Progress', icon: 'trending_up', href: '/student/progress' },
+                      { name: 'Messages', icon: 'chat', href: '/student/messages' },
                     ].map((item, idx) => (
-                      <a key={idx} href="#" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
+                      <a key={idx} href={item.href} className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
                         <span className="material-symbols-outlined">{item.icon}</span>
                         <span className="text-sm tracking-normal">{item.name}</span>
                       </a>
                     ))}
-                    
+
                     <div className="my-4 border-t border-slate-100"></div>
 
-                    <a href="#" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
+                    <a href="/student/settings" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
                       <span className="material-symbols-outlined">settings</span>
                       <span className="text-sm tracking-normal">Settings</span>
                     </a>
