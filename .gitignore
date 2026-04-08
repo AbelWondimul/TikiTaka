@@ -48,3 +48,4 @@ CLAUDE.md
 # Playwright test artifacts
 .playwright-mcp/
 test-*.png
+test-*.xlsx
