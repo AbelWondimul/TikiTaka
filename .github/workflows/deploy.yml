@@ -24,12 +24,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Grading Function Dependencies
-        run: |
-          cd functions/grading
-          python3.12 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
+      - name: Create Python Virtual Environment
+        run: cd functions/grading && python3.12 -m venv venv
+
+      - name: Install Python Dependencies
+        run: cd functions/grading && source venv/bin/activate && pip install -r requirements.txt
 
       - name: Install Next.js Dependencies
         run: cd apps/web && npm install
