@@ -1,6 +1,21 @@
 # Completed Features — Automated PDF Grading Engine
 
-This document outlines the features and components that are currently implemented in the Automated PDF Grading Engine project.
+> **STATUS — OUT OF DATE.** This file reflects only the early-2026 baseline
+> (auth, dashboards, Python grading, quiz scaffolding, dark mode). It does
+> NOT mention Assessments, Modules, Forum, Attendance, Office Hours,
+> Gradebook, Messaging, Schedule, Plagiarism, Video Submissions, PWA,
+> Accommodations, AI feedback loop, AI syllabus extraction, Course cloning,
+> Early warning, SpeedGrader, or other shipped functionality.
+>
+> **Source of truth:** `DECISIONS.md` (28 numbered decisions) and
+> `FEATURES.md` (current feature list). Consult those when onboarding or
+> auditing scope. The contents below are kept only as a historical
+> snapshot of the v1 milestone.
+
+---
+
+This document outlines the features and components that were implemented in the
+initial v1 milestone of the Automated PDF Grading Engine project.
 
 ---
 
