@@ -57,10 +57,20 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /users/{userId} {
-      // Any authenticated user can read profiles (teachers look up their students)
+      // Any authenticated user can read public profile fields (teachers look up
+      // students for the gradebook; students look up their teacher's name).
+      // Sensitive fields (calendarToken, fcmTokens) live in /users/{uid}/private/
+      // and are owner-only — see below.
       allow read: if isAuthenticated();
       // Only the user themselves can write their own profile
       allow write: if isOwner(userId);
+
+      // Private subcollection: owner-only. Holds calendar tokens, FCM device
+      // tokens, and any future per-user secrets. Cloud Functions running with
+      // admin credentials bypass these rules.
+      match /private/{docId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // ─────────────────────────────────────────
@@ -505,8 +515,12 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /submissionDrafts/{draftId} {
-      // Only the student who owns the draft can read/write
-      allow read, write: if isAuthenticated() && resource == null || resource.data.studentId == request.auth.uid;
+      // Only the student who owns the draft can read/write.
+      // Parentheses are required: without them, JS-style precedence parses this
+      // as (isAuthenticated() && resource == null) || resource.data.studentId ==
+      // request.auth.uid, which would grant any authenticated user read/write to
+      // a not-yet-existing draft path.
+      allow read, write: if isAuthenticated() && (resource == null || resource.data.studentId == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
       allow update, delete: if isAuthenticated() && resource.data.studentId == request.auth.uid;
     }

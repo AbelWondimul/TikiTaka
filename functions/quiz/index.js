@@ -269,7 +269,8 @@ exports.getClassPerformance = functions.https.onCall(async (data, context) => {
 // ---------------------------------------------------------------------------
 // getCalendarToken — HTTPS Callable
 // Generates or retrieves a unique calendar token for the student.
-// Stored in users/{uid}.calendarToken
+// Stored in users/{uid}/private/calendar (owner-only subcollection so the
+// token does not leak through the broad users/{uid} read rule).
 // ---------------------------------------------------------------------------
 exports.getCalendarToken = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -277,18 +278,22 @@ exports.getCalendarToken = functions.https.onCall(async (data, context) => {
   }
 
   const uid = context.auth.uid;
-  const userRef = admin.firestore().collection("users").doc(uid);
-  const userDoc = await userRef.get();
+  const privateRef = admin.firestore()
+    .collection("users").doc(uid)
+    .collection("private").doc("calendar");
+  const privateDoc = await privateRef.get();
 
-  if (userDoc.exists && userDoc.data().calendarToken) {
-    return { token: userDoc.data().calendarToken };
+  if (privateDoc.exists && privateDoc.data().calendarToken) {
+    return { token: privateDoc.data().calendarToken };
   }
 
   // Generate a unique token
   const crypto = require("crypto");
   const token = crypto.randomBytes(24).toString("hex");
 
-  await userRef.set({ calendarToken: token }, { merge: true });
+  // Write into the private subcollection. Also stamp the parent uid so the
+  // collectionGroup query in calendarFeed can resolve back to a user.
+  await privateRef.set({ calendarToken: token, uid }, { merge: true });
 
   return { token };
 });
@@ -307,20 +312,28 @@ exports.calendarFeed = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    // Find the user with this calendar token
-    const usersSnap = await admin.firestore()
-      .collection("users")
+    // Find the user with this calendar token via collectionGroup query on the
+    // owner-only private subcollection. The doc stamps `uid` so we can resolve
+    // back to the user without exposing the token in /users/{uid}.
+    const privateSnap = await admin.firestore()
+      .collectionGroup("private")
       .where("calendarToken", "==", token)
       .limit(1)
       .get();
 
-    if (usersSnap.empty) {
+    if (privateSnap.empty) {
       res.status(404).send("Invalid calendar token.");
       return;
     }
 
-    const userDoc = usersSnap.docs[0];
-    const uid = userDoc.id;
+    const privateDoc = privateSnap.docs[0];
+    const uid = privateDoc.data().uid || privateDoc.ref.parent.parent.id;
+    const userDocRef = admin.firestore().collection("users").doc(uid);
+    const userDoc = await userDocRef.get();
+    if (!userDoc.exists) {
+      res.status(404).send("Invalid calendar token.");
+      return;
+    }
     const userData = userDoc.data();
 
     // Get student's enrolled classes
