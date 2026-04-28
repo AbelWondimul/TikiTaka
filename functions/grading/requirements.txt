@@ -1,5 +1,15 @@
-firebase-functions>=0.1.0
-firebase-admin>=6.5.0
-PyMuPDF>=1.25.0
-Pillow>=10.3.0
-google-generativeai>=0.8.2
+# Bounded version ranges to prevent silent breakage between deploys.
+# The audit (reports/Grader.md §4.5) flagged the prior loose `>=` pins:
+# two deploys a week apart could pull a new major SDK and break the
+# Firestore trigger. These ranges allow patch/minor updates within a
+# known-good major series.
+#
+# To regenerate a hard lockfile (recommended for CI), run from this dir:
+#   pip install pip-tools
+#   pip-compile --output-file=requirements.lock.txt requirements.txt
+#
+firebase-functions>=0.4.0,<2.0    # v2 Python SDK (firestore_fn, https_fn, options)
+firebase-admin>=6.5.0,<8.0        # Firestore + Storage admin client
+PyMuPDF>=1.25.0,<2.0              # fitz — PDF render/parse
+Pillow>=10.3.0,<12.0              # image composition for annotated pages
+google-generativeai>=0.8.2,<1.0   # legacy Gemini SDK (note: google-genai is the new SDK; migration deferred)
