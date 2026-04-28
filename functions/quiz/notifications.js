@@ -8,6 +8,29 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // ---------------------------------------------------------------------------
+// Structured logging helpers
+// ---------------------------------------------------------------------------
+// Cloud Logging parses any JSON line emitted to stdout/stderr and turns
+// `severity` into a real severity level + the rest of the keys into
+// jsonPayload fields, which makes them filterable in the Logs Explorer
+// (e.g. `jsonPayload.notificationId="abc"`). Cheaper than Error Reporting
+// because we control the call sites and can attach context to every log.
+function log(severity, message, fields) {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({ severity, message, ...(fields || {}) }));
+}
+function logInfo(message, fields) { log("INFO", message, fields); }
+function logWarn(message, fields) { log("WARNING", message, fields); }
+function logError(message, err, fields) {
+  log("ERROR", message, {
+    ...(fields || {}),
+    error: err && err.message ? err.message : String(err),
+    stack: err && err.stack ? err.stack : undefined,
+    code: err && err.code ? err.code : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Email templates
 // ---------------------------------------------------------------------------
 const templates = {
@@ -84,32 +107,40 @@ const templates = {
 exports.sendEmailNotification = functions.firestore
   .document("notifications/{notificationId}")
   .onCreate(async (snap, context) => {
+    const notificationId = context.params.notificationId;
     const notification = snap.data();
+    const ctx = { notificationId, type: notification && notification.type };
 
     // Only process if email flag is set
     if (!notification.sendEmail) return;
 
     const recipientId = notification.recipientId;
-    if (!recipientId) return;
+    if (!recipientId) {
+      logWarn("email skipped: missing recipientId", ctx);
+      return;
+    }
 
     try {
       // Get recipient's email
       const userDoc = await db.collection("users").doc(recipientId).get();
-      if (!userDoc.exists) return;
+      if (!userDoc.exists) {
+        logWarn("email skipped: recipient user doc missing", { ...ctx, recipientId });
+        return;
+      }
 
       const userData = userDoc.data();
       const email = userData.email;
 
       // Check if user has email notifications enabled
       if (userData.settings?.emailNotifications === false) {
-        console.log(`Email notifications disabled for ${email}`);
+        logInfo("email skipped: user disabled email notifications", { ...ctx, recipientId });
         return;
       }
 
       // Get template
       const templateFn = templates[notification.type];
       if (!templateFn) {
-        console.log(`No email template for type: ${notification.type}`);
+        logWarn("email skipped: no template for type", ctx);
         return;
       }
 
@@ -124,10 +155,11 @@ exports.sendEmailNotification = functions.firestore
 
       if (!apiKey) {
         // Emulator mode — just log
-        console.log("=== EMAIL (emulator mode) ===");
-        console.log(`To: ${email}`);
-        console.log(`Subject: ${subject}`);
-        console.log("============================");
+        logInfo("email (emulator mode, no RESEND_API_KEY set)", {
+          ...ctx,
+          to: email,
+          subject,
+        });
 
         // Record in sentEmails for debugging
         await db.collection("sentEmails").add({
@@ -158,6 +190,15 @@ exports.sendEmailNotification = functions.firestore
 
       const result = await response.json();
 
+      if (!response.ok) {
+        logError("Resend API rejected email", new Error(result?.message || `HTTP ${response.status}`), {
+          ...ctx,
+          httpStatus: response.status,
+          recipientId,
+        });
+        return;
+      }
+
       // Record sent email
       await db.collection("sentEmails").add({
         to: email,
@@ -169,9 +210,9 @@ exports.sendEmailNotification = functions.firestore
         emulator: false,
       });
 
-      console.log(`Email sent to ${email}: ${subject}`);
+      logInfo("email sent", { ...ctx, recipientId, resendId: result.id });
     } catch (err) {
-      console.error("Email notification error:", err);
+      logError("email notification handler crashed", err, ctx);
     }
   });
 
@@ -181,13 +222,18 @@ exports.sendEmailNotification = functions.firestore
 exports.sendPushNotification = functions.firestore
   .document("notifications/{notificationId}")
   .onCreate(async (snap, context) => {
+    const notificationId = context.params.notificationId;
     const notification = snap.data();
+    const ctx = { notificationId, type: notification && notification.type };
 
     // Only process if push flag is set
     if (!notification.sendPush) return;
 
     const recipientId = notification.recipientId;
-    if (!recipientId) return;
+    if (!recipientId) {
+      logWarn("push skipped: missing recipientId", ctx);
+      return;
+    }
 
     try {
       // FCM tokens live in the owner-only private subcollection so they
@@ -228,10 +274,20 @@ exports.sendPushNotification = functions.firestore
             { fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens) },
             { merge: true }
           );
+        logInfo("push: cleaned up invalid FCM tokens", {
+          ...ctx,
+          recipientId,
+          removed: invalidTokens.length,
+        });
       }
 
-      console.log(`Push sent to ${recipientId}: ${response.successCount}/${tokens.length} delivered`);
+      logInfo("push sent", {
+        ...ctx,
+        recipientId,
+        delivered: response.successCount,
+        attempted: tokens.length,
+      });
     } catch (err) {
-      console.error("Push notification error:", err);
+      logError("push notification handler crashed", err, { ...ctx, recipientId });
     }
   });
