@@ -62,6 +62,14 @@ service firebase.storage {
       );
     }
 
+    // Video submissions (DECISIONS.md #22). Owner-only write capped at 500 MB
+    // to match the in-browser MediaRecorder/upload limit. Owner reads their
+    // own video; teachers (admin) read any video for grading.
+    match /videoSubmissions/{uid}/{jobId} {
+      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 500 * 1024 * 1024;
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
+    }
+
     match /avatars/{uid} {
       allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 5 * 1024 * 1024;
       allow read: if isAuthenticated();
