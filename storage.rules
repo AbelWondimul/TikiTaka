@@ -26,8 +26,31 @@ service firebase.storage {
         request.auth.uid in firestore.get(/databases/(default)/documents/classes/$(classId)).data.get('taIds', []);
     }
 
+    // Helper — allow only PDF MIME, with the broader application/octet-stream
+    // permitted because some browsers/SDKs upload PDFs without a content-type.
+    function isPdfUpload() {
+      return request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'application/octet-stream'
+        || request.resource.contentType == null;
+    }
+
+    function isVideoUpload() {
+      return request.resource.contentType == null
+        || request.resource.contentType == 'application/octet-stream'
+        || request.resource.contentType.matches('video/.*');
+    }
+
+    function isImageUpload() {
+      return request.resource.contentType != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /raw/{uid}/{jobId} {
-      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 20 * 1024 * 1024;
+      // PDF student submissions — owner-only write, ≤20 MB, PDF content-type.
+      allow write: if isAuthenticated()
+        && request.auth.uid == uid
+        && request.resource.size < 20 * 1024 * 1024
+        && isPdfUpload();
       allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
     match /results/{uid}/{jobId} {
@@ -47,16 +70,25 @@ service firebase.storage {
 
     match /knowledgeBase/{classId}/{docId} {
       allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId));
-      allow write: if isTeacher();
+      // Teacher reference materials — PDFs only, ≤50 MB.
+      allow write: if isTeacher()
+        && request.resource.size < 50 * 1024 * 1024
+        && isPdfUpload();
     }
 
     match /moduleResources/{classId}/{docId} {
       allow read: if isAuthenticated() && (isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId));
-      allow write: if isTeacher();
+      // Module attachments — PDFs only, ≤50 MB.
+      allow write: if isTeacher()
+        && request.resource.size < 50 * 1024 * 1024
+        && isPdfUpload();
     }
 
     match /assignments/{classId}/{fileId} {
-      allow write: if isTeacher();
+      // Assignment PDFs — teacher-only, ≤50 MB.
+      allow write: if isTeacher()
+        && request.resource.size < 50 * 1024 * 1024
+        && isPdfUpload();
       allow read: if isAuthenticated() && (
         isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId)
       );
@@ -64,14 +96,22 @@ service firebase.storage {
 
     // Video submissions (DECISIONS.md #22). Owner-only write capped at 500 MB
     // to match the in-browser MediaRecorder/upload limit. Owner reads their
-    // own video; teachers (admin) read any video for grading.
+    // own video; teachers (admin) read any video for grading. Restrict to
+    // video/* MIME so uploaders cannot stash arbitrary blobs here.
     match /videoSubmissions/{uid}/{jobId} {
-      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 500 * 1024 * 1024;
+      allow write: if isAuthenticated()
+        && request.auth.uid == uid
+        && request.resource.size < 500 * 1024 * 1024
+        && isVideoUpload();
       allow read: if isAuthenticated() && (request.auth.uid == uid || isTeacher());
     }
 
     match /avatars/{uid} {
-      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 5 * 1024 * 1024;
+      // Avatar — owner-only, ≤5 MB, image/* only.
+      allow write: if isAuthenticated()
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && isImageUpload();
       allow read: if isAuthenticated();
     }
 
