@@ -115,8 +115,12 @@ exports.sendEmailNotification = functions.firestore
 
       const { subject, html } = templateFn(notification.data || {});
 
-      // Check for Resend API key
-      const apiKey = process.env.RESEND_API_KEY || functions.config().resend?.api_key;
+      // Check for Resend API key.
+      // Functions v1 `functions.config()` was deprecated by Firebase in
+      // favour of v2 secrets / `process.env`. We read from process.env only;
+      // set RESEND_API_KEY in the function environment (or as a Firebase
+      // Secret bound at deploy time) — see README/SETUP_GUIDE.
+      const apiKey = process.env.RESEND_API_KEY;
 
       if (!apiKey) {
         // Emulator mode — just log
