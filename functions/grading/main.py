@@ -410,7 +410,7 @@ Knowledge Base Context (Optional reference):
             if conf == 'low' or stat == 'unclear' or q.get('pointsEarned') is None:
                 low_confidence_questions.append(q.get('questionNumber'))
                 
-        if low_confidence_questions:
+        if len(low_confidence_questions) >= 3:
             job_ref.update({'progress_text': f'Handling edge cases for {len(low_confidence_questions)} question(s)...'})
             try:
                 model_pro = genai.GenerativeModel('gemini-2.5-pro')
@@ -797,7 +797,7 @@ Return ONLY a valid JSON array (no markdown). Each item must have:
 
 @https_fn.on_call(
     timeout_sec=300,
-    memory=options.MemoryOption.GB_2,
+    memory=options.MemoryOption.GB_1,
     secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def generate_rubric(req: https_fn.CallableRequest):
