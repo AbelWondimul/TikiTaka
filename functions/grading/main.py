@@ -680,23 +680,26 @@ def generate_quiz(req: https_fn.CallableRequest):
     # ------------------------------------------------------------------
     kb_text = ""
     try:
-        import fitz  # PyMuPDF — lazy import
-        kb_query = _get_db().collection("knowledgeBase").where("classId", "==", class_id).stream()
-        for kb_doc in kb_query:
-            if kb_doc.id in excluded_doc_ids:
-                continue
-            kb_data = kb_doc.to_dict()
-            kb_path = kb_data.get("storageUrl")
-            kb_blob = _get_bucket().blob(kb_path)
-            if kb_blob.exists():
-                kb_bytes = kb_blob.download_as_bytes()
-                try:
-                    kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
-                    for page in kb_pdf:
-                        kb_text += page.get_text() + "\n"
-                    kb_pdf.close()
-                except Exception as parse_err:
-                    print(f"Failed to parse KB doc {kb_data.get('title')}: {parse_err}")
+        if not excluded_doc_ids:
+            kb_text = _get_kb_text(class_id)
+        else:
+            import fitz
+            kb_query = _get_db().collection("knowledgeBase").where("classId", "==", class_id).stream()
+            for kb_doc in kb_query:
+                if kb_doc.id in excluded_doc_ids:
+                    continue
+                kb_data = kb_doc.to_dict()
+                kb_path = kb_data.get("storageUrl")
+                kb_blob = _get_bucket().blob(kb_path)
+                if kb_blob.exists():
+                    kb_bytes = kb_blob.download_as_bytes()
+                    try:
+                        kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
+                        for page in kb_pdf:
+                            kb_text += page.get_text() + "\n"
+                        kb_pdf.close()
+                    except Exception as parse_err:
+                        print(f"Failed to parse KB doc {kb_data.get('title')}: {parse_err}")
     except Exception as e:
         print(f"Warning: Could not read knowledgeBase: {e}")
 
