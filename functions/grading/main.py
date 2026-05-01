@@ -13,6 +13,8 @@ import os
 import json
 import time
 import base64
+import datetime
+import hashlib
 from io import BytesIO
 
 from firebase_admin import initialize_app, firestore, storage
@@ -39,9 +41,6 @@ def _get_bucket():
     return _bucket
 
 
-import datetime
-import hashlib
-
 def _get_kb_text(class_id, max_chars=30000):
     """Return extracted text from all KB PDFs for class_id.
 
@@ -49,8 +48,6 @@ def _get_kb_text(class_id, max_chars=30000):
     unchanged KB PDFs on every function invocation. Cache is invalidated
     automatically when any KB doc is added, removed, or updated.
     """
-    import fitz
-
     db = _get_db()
 
     kb_docs = list(
@@ -82,6 +79,7 @@ def _get_kb_text(class_id, max_chars=30000):
         if not kb_blob.exists():
             continue
         try:
+            import fitz
             kb_bytes = kb_blob.download_as_bytes()
             kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
             for page in kb_pdf:
@@ -90,13 +88,13 @@ def _get_kb_text(class_id, max_chars=30000):
         except Exception as e:
             print(f"Failed to parse KB doc {kb_data.get('title')}: {e}")
 
-    full_text = full_text[:30000]
+    full_text = full_text[:30000]  # internal cache cap stays at 30000
     cache_ref.set({
         'hash': current_hash,
         'text': full_text,
         'updatedAt': firestore.SERVER_TIMESTAMP
     })
-    return full_text[:max_chars]
+    return full_text[:max_chars]  # return respects caller's max_chars parameter
 
 
 def _increment_usage():
