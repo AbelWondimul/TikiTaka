@@ -40,6 +40,64 @@ def _get_bucket():
 
 
 import datetime
+import hashlib
+
+def _get_kb_text(class_id, max_chars=30000):
+    """Return extracted text from all KB PDFs for class_id.
+
+    Uses a kbCache/{class_id} Firestore document to avoid re-downloading
+    unchanged KB PDFs on every function invocation. Cache is invalidated
+    automatically when any KB doc is added, removed, or updated.
+    """
+    import fitz
+
+    db = _get_db()
+
+    kb_docs = list(
+        db.collection('knowledgeBase').where('classId', '==', class_id).stream()
+    )
+    if not kb_docs:
+        return ""
+
+    sorted_pairs = sorted(
+        (doc.id, doc.update_time.isoformat()) for doc in kb_docs
+    )
+    hash_input = "|".join(f"{doc_id}:{ts}" for doc_id, ts in sorted_pairs)
+    current_hash = hashlib.md5(hash_input.encode()).hexdigest()
+
+    cache_ref = db.collection('kbCache').document(class_id)
+    cache_snap = cache_ref.get()
+    if cache_snap.exists:
+        cached = cache_snap.to_dict()
+        if cached.get('hash') == current_hash:
+            return cached.get('text', '')[:max_chars]
+
+    full_text = ""
+    for kb_doc in kb_docs:
+        kb_data = kb_doc.to_dict()
+        kb_path = kb_data.get('storageUrl')
+        if not kb_path:
+            continue
+        kb_blob = _get_bucket().blob(kb_path)
+        if not kb_blob.exists():
+            continue
+        try:
+            kb_bytes = kb_blob.download_as_bytes()
+            kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
+            for page in kb_pdf:
+                full_text += page.get_text() + "\n"
+            kb_pdf.close()
+        except Exception as e:
+            print(f"Failed to parse KB doc {kb_data.get('title')}: {e}")
+
+    full_text = full_text[:30000]
+    cache_ref.set({
+        'hash': current_hash,
+        'text': full_text,
+        'updatedAt': firestore.SERVER_TIMESTAMP
+    })
+    return full_text[:max_chars]
+
 
 def _increment_usage():
     try:
