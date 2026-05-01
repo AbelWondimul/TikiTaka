@@ -978,28 +978,13 @@ def tika_chat(req: https_fn.CallableRequest):
 
     kb_text = ""
     if class_ids:
-        import fitz
         for cid in class_ids[:10]:  # cap at 10 classes
-            kb_query = db.collection('knowledgeBase').where('classId', '==', cid).stream()
-            for kb_doc in kb_query:
-                kb_data = kb_doc.to_dict()
-                kb_path = kb_data.get('storageUrl')
-                if not kb_path:
-                    continue
-                try:
-                    kb_blob = _get_bucket().blob(kb_path)
-                    if kb_blob.exists():
-                        kb_bytes = kb_blob.download_as_bytes()
-                        kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
-                        for page in kb_pdf:
-                            kb_text += page.get_text() + "\n"
-                        kb_pdf.close()
-                except Exception as e:
-                    print(f"Failed to parse KB doc: {e}")
-
-    # Cap KB text to avoid token overflows
-    if len(kb_text) > 30000:
-        kb_text = kb_text[:30000] + "\n[...truncated]"
+            class_kb = _get_kb_text(cid, max_chars=8000)
+            if class_kb:
+                kb_text += class_kb + "\n"
+            if len(kb_text) >= 30000:
+                break
+    kb_text = kb_text[:30000]
 
     genai = _init_genai()
     model = genai.GenerativeModel("gemini-2.5-flash")
