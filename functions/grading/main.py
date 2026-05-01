@@ -253,7 +253,7 @@ Respond ONLY with the JSON, no markdown."""
         page_images = []
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
-            pix = page.get_pixmap(dpi=150)
+            pix = page.get_pixmap(dpi=120)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             # Add light invisible coordinate grid overlay (optional)
             # draw = ImageDraw.Draw(img)
@@ -355,7 +355,7 @@ Knowledge Base Context (Optional reference):
         contents = [prompt]
         for p in page_images:
             b = BytesIO()
-            p['img'].save(b, format="JPEG", quality=85)
+            p['img'].save(b, format="JPEG", quality=70)
             img_data = b.getvalue()
             contents.append({
                 "mime_type": "image/jpeg",
@@ -462,7 +462,7 @@ Example structure (NO other text/markdown outside this array):
         for p in page_images:
             img = p['img']
             b = BytesIO()
-            img.save(b, format="JPEG", quality=85)
+            img.save(b, format="JPEG", quality=70)
             img_bytes = b.getvalue()
             
             pdf_page = out_pdf.new_page(width=p['width'], height=p['height'])
@@ -801,7 +801,7 @@ def generate_rubric(req: https_fn.CallableRequest):
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             for page_num in range(len(pdf_doc)):
                 page = pdf_doc.load_page(page_num)
-                pix = page.get_pixmap(dpi=150)
+                pix = page.get_pixmap(dpi=120)
                 # Convert Pixmap to PIL Image
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 page_images.append(img)
@@ -861,7 +861,7 @@ Return ONLY a JSON block with this exact structure (no markdown fences, just sta
     from io import BytesIO
     for img in page_images:
         b = BytesIO()
-        img.save(b, format="JPEG", quality=85)
+        img.save(b, format="JPEG", quality=70)
         contents.append({
             "mime_type": "image/jpeg",
             "data": b.getvalue()
