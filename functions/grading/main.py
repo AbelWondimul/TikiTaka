@@ -416,6 +416,8 @@ Knowledge Base Context (Optional reference):
                 model_pro = genai.GenerativeModel('gemini-2.5-pro')
             except Exception:
                 model_pro = model # Fallback to Flash if unavailable
+        elif low_confidence_questions:
+            print(f"edge_case_skip: {len(low_confidence_questions)} low-confidence question(s) below threshold, skipping Pro re-eval")
                 
             edge_case_prompt = f"""
 In this iteration, you are handling difficult edge cases in a student's submitted homework PDF.
