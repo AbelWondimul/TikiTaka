@@ -179,23 +179,8 @@ def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Documen
         if submission_type == 'text' and submission_text:
             job_ref.update({'progress': 10, 'progress_text': 'Processing text submission...'})
 
-            # Fetch Knowledge Base Text
-            kb_text = ""
-            kb_query = _get_db().collection('knowledgeBase').where('classId', '==', class_id).stream()
-            for kb_doc in kb_query:
-                kb_data_doc = kb_doc.to_dict()
-                kb_path = kb_data_doc.get('storageUrl')
-                kb_blob = _get_bucket().blob(kb_path)
-                if kb_blob.exists():
-                    kb_bytes = kb_blob.download_as_bytes()
-                    try:
-                        import fitz
-                        kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
-                        for page in kb_pdf:
-                            kb_text += page.get_text() + "\n"
-                        kb_pdf.close()
-                    except Exception as e:
-                        print(f"Failed to parse KB doc: {e}")
+            # Fetch Knowledge Base Text (cached)
+            kb_text = _get_kb_text(class_id)
 
             job_ref.update({'progress': 30, 'progress_text': 'Grading text response...'})
 
@@ -286,22 +271,8 @@ Respond ONLY with the JSON, no markdown."""
         pdf_bytes = blob.download_as_bytes()
         job_ref.update({'progress': 10, 'progress_text': 'Downloaded submission PDF.'})
         
-        # 2. Fetch Knowledge Base Text
-        kb_text = ""
-        kb_query = _get_db().collection('knowledgeBase').where('classId', '==', class_id).stream()
-        for kb_doc in kb_query:
-            kb_data = kb_doc.to_dict()
-            kb_path = kb_data.get('storageUrl')
-            kb_blob = _get_bucket().blob(kb_path)
-            if kb_blob.exists():
-                kb_bytes = kb_blob.download_as_bytes()
-                try:
-                    kb_pdf = fitz.open(stream=kb_bytes, filetype="pdf")
-                    for page in kb_pdf:
-                        kb_text += page.get_text() + "\n"
-                    kb_pdf.close()
-                except Exception as e:
-                    print(f"Failed to parse KB doc {kb_data.get('title')}: {e}")
+        # 2. Fetch Knowledge Base Text (cached)
+        kb_text = _get_kb_text(class_id)
                     
         job_ref.update({'progress': 20, 'progress_text': 'Retrieved knowledge base materials.'})
         # 3. Render PDF to Images (120 DPI)
