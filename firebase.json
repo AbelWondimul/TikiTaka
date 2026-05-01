@@ -76,6 +76,20 @@
         "source": "/teacher/homework/:homeworkId/submissions/:submissionId",
         "destination": "/teacher/homework/[homeworkId]/submissions/[submissionId].html"
       }
+    ],
+    "headers": [
+      {
+        "source": "**/_next/static/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|woff2|woff|ttf|eot)",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      }
     ]
   },
   "functions": [
