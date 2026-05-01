@@ -248,7 +248,7 @@ Respond ONLY with the JSON, no markdown."""
                     print(f"Failed to parse KB doc {kb_data.get('title')}: {e}")
                     
         job_ref.update({'progress': 20, 'progress_text': 'Retrieved knowledge base materials.'})
-        # 3. Render PDF to Images (150 DPI)
+        # 3. Render PDF to Images (120 DPI)
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         page_images = []
         for page_num in range(len(doc)):
