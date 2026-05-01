@@ -690,6 +690,8 @@ def generate_quiz(req: https_fn.CallableRequest):
                     continue
                 kb_data = kb_doc.to_dict()
                 kb_path = kb_data.get("storageUrl")
+                if not kb_path:
+                    continue
                 kb_blob = _get_bucket().blob(kb_path)
                 if kb_blob.exists():
                     kb_bytes = kb_blob.download_as_bytes()
