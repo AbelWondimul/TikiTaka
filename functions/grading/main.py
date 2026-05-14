@@ -1366,3 +1366,85 @@ Keep all block IDs unique. Use sequential order values starting from 1 (dividers
     increment_teacher_quiz_gen(teacher_id)
     _increment_usage()
     return result
+
+
+# ---------------------------------------------------------------------------
+# extract_pdf_pages — HTTPS Callable
+# Renders each page of a teacher-uploaded PDF as a JPEG image and uploads
+# them to assignment_pages/{classId}/{assignmentId}/ in Storage.
+# Returns an ordered list of { pageNumber, url, storagePath } objects.
+# ---------------------------------------------------------------------------
+
+@https_fn.on_call(
+    timeout_sec=120,
+    memory=options.MemoryOption.GB_1,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
+)
+def extract_pdf_pages(req: https_fn.CallableRequest):
+    """
+    Input:  { classId: str, assignmentId: str, storagePath: str }
+    Returns: { pages: [{ pageNumber, url, storagePath }] }
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Authentication required."
+        )
+
+    from validators import ExtractPdfPagesInput
+    from pydantic import ValidationError as PydanticValidationError
+
+    try:
+        inp = ExtractPdfPagesInput(**(req.data or {}))
+    except PydanticValidationError as ve:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message=str(ve)
+        )
+
+    bucket = _get_bucket()
+    blob = bucket.blob(inp.storagePath)
+    if not blob.exists():
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.NOT_FOUND,
+            message=f"PDF not found at path: {inp.storagePath}"
+        )
+
+    pdf_bytes = blob.download_as_bytes()
+    MAX_PDF_BYTES = 50 * 1024 * 1024
+    if len(pdf_bytes) > MAX_PDF_BYTES:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message=f"PDF exceeds 50 MB limit ({len(pdf_bytes) / 1024 / 1024:.1f} MB)."
+        )
+
+    import fitz
+    from PIL import Image
+    import datetime
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    result_pages = []
+
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        pix = page.get_pixmap(dpi=150)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img_bytes = _resize_for_gemini(img, max_side=1200, quality=85)
+
+        dest_path = f"assignment_pages/{inp.classId}/{inp.assignmentId}/page_{page_num + 1}.jpg"
+        dest_blob = bucket.blob(dest_path)
+        dest_blob.upload_from_string(img_bytes, content_type="image/jpeg")
+
+        url = dest_blob.generate_signed_url(
+            expiration=datetime.timedelta(hours=1),
+            method='GET'
+        )
+        result_pages.append({
+            'pageNumber': page_num + 1,
+            'url': url,
+            'storagePath': dest_path
+        })
+
+    doc.close()
+    _increment_usage()
+    return {'pages': result_pages}
