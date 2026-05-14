@@ -541,7 +541,7 @@ service cloud.firestore {
     // Service-account writes only; teacher reads.
     // ─────────────────────────────────────────
     match /quizCache/{docId} {
-      allow read: if isTeacher();
+      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
       allow write: if false;
     }
 
@@ -561,7 +561,7 @@ service cloud.firestore {
     // Rate Limits (per-user counters for grading and quiz generation)
     // Service-account writes; the owning user reads their own.
     // ─────────────────────────────────────────
-    match /rateLimits/{uid}/{docId} {
+    match /rateLimits/{uid}/quizGen/{docId} {
       allow read: if isOwner(uid);
       allow write: if false;
     }

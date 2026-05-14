@@ -115,6 +115,8 @@ service firebase.storage {
       allow read: if isAuthenticated();
     }
 
+    // Assignment page images extracted from teacher-uploaded PDFs.
+    // Teacher-only write (any teacher); enrolled students and TAs read per class.
     match /assignment_pages/{classId}/{assignmentId}/{fileName} {
       // Teacher who owns the class writes page images; enrolled students and TAs read.
       allow write: if isTeacher()
