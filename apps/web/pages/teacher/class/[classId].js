@@ -43,10 +43,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock, Download, CalendarClock, X } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, FileText, CheckCircle, Upload, Trash2, FileIcon, Award, Plus, MoreHorizontal, Pencil, ClipboardList, Flame, AlertTriangle, TrendingDown, Megaphone, Clock, Download, CalendarClock, X, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const RichMathEditor = dynamic(() => import('@/components/editor/RichMathEditor'), { ssr: false });
+
+import QuickGenerateModal from '@/components/teacher/QuickGenerateModal';
 
 // Quiz form schema moved inside components for dynamic validation
 
@@ -130,6 +132,9 @@ function TeacherClassPage() {
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [isAssignmentSubmitting, setIsAssignmentSubmitting] = useState(false);
+
+  // Generate Modal State
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   // Quiz form schema with dynamic validation
   const quizFormSchema = useMemo(() => z.object({
@@ -1879,6 +1884,12 @@ function TeacherClassPage() {
                       Upload reading assignments or homework sheets for AI assisted grading.
                     </CardDescription>
                   </div>
+                  {isClassOwner && (
+                    <Button variant="outline" onClick={() => setShowGenerateModal(true)}>
+                      <Zap className="h-4 w-4 mr-2 text-yellow-500" />
+                      Generate with AI
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -2488,6 +2499,17 @@ function TeacherClassPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QuickGenerateModal
+        open={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        classId={classId}
+        prefill=""
+        onGenerated={(data) => {
+          const encoded = encodeURIComponent(JSON.stringify(data));
+          router.push(`/teacher/assignment-builder/${classId}?generated=${encoded}`);
+        }}
+      />
     </>
   );
 }
