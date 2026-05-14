@@ -75,6 +75,10 @@
       {
         "source": "/teacher/homework/:homeworkId/submissions/:submissionId",
         "destination": "/teacher/homework/[homeworkId]/submissions/[submissionId].html"
+      },
+      {
+        "source": "/teacher/assignment-builder/:classId",
+        "destination": "/teacher/assignment-builder/[classId].html"
       }
     ],
     "headers": [
