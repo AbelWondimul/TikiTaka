@@ -1402,6 +1402,27 @@ def extract_pdf_pages(req: https_fn.CallableRequest):
             message=str(ve)
         )
 
+    class_doc = _get_db().collection('classes').document(inp.classId).get()
+    if not class_doc.exists:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.NOT_FOUND,
+            message='Class not found.'
+        )
+    class_data = class_doc.to_dict()
+    is_owner = class_data.get('teacherId') == req.auth.uid
+    is_ta = req.auth.uid in class_data.get('taIds', [])
+    if not is_owner and not is_ta:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            message='You do not have permission to access this class.'
+        )
+
+    if not inp.storagePath.startswith('assignments/'):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message='storagePath must reference an assignments/ object.'
+        )
+
     bucket = _get_bucket()
     blob = bucket.blob(inp.storagePath)
     if not blob.exists():
@@ -1420,31 +1441,32 @@ def extract_pdf_pages(req: https_fn.CallableRequest):
 
     import fitz
     from PIL import Image
-    import datetime
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     result_pages = []
 
-    for page_num in range(len(doc)):
-        page = doc.load_page(page_num)
-        pix = page.get_pixmap(dpi=150)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        img_bytes = _resize_for_gemini(img, max_side=1200, quality=85)
+    try:
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(dpi=150)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img_bytes = _resize_for_gemini(img, max_side=1200, quality=85)
 
-        dest_path = f"assignment_pages/{inp.classId}/{inp.assignmentId}/page_{page_num + 1}.jpg"
-        dest_blob = bucket.blob(dest_path)
-        dest_blob.upload_from_string(img_bytes, content_type="image/jpeg")
+            dest_path = f"assignment_pages/{inp.classId}/{inp.assignmentId}/page_{page_num + 1}.jpg"
+            dest_blob = bucket.blob(dest_path)
+            dest_blob.upload_from_string(img_bytes, content_type="image/jpeg")
 
-        url = dest_blob.generate_signed_url(
-            expiration=datetime.timedelta(hours=1),
-            method='GET'
-        )
-        result_pages.append({
-            'pageNumber': page_num + 1,
-            'url': url,
-            'storagePath': dest_path
-        })
-
-    doc.close()
+            url = dest_blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(hours=1),
+                method='GET'
+            )
+            result_pages.append({
+                'pageNumber': page_num + 1,
+                'url': url,
+                'storagePath': dest_path
+            })
+    finally:
+        doc.close()
     _increment_usage()
     return {'pages': result_pages}
