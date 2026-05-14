@@ -287,6 +287,7 @@ Respond ONLY with the JSON, no markdown."""
 
             # After each job completes, check if all jobs for the assignment are done → compute insights
             try:
+                from insights import compute_insights
                 assignment_id = job_data.get('assignmentId')
                 teacher_id_for_insights = job_data.get('teacherId')
                 if assignment_id and class_id:
@@ -294,7 +295,6 @@ Respond ONLY with the JSON, no markdown."""
                     all_jobs = list(all_jobs_q.stream())
                     pending = [j for j in all_jobs if j.to_dict().get('status') not in ('complete', 'error')]
                     if not pending:
-                        from insights import compute_insights
                         genai_for_insights = _init_genai()
                         compute_insights(assignment_id, class_id, teacher_id_for_insights, genai_for_insights)
                         print(f"Insights computed for assignment {assignment_id}")
@@ -654,6 +654,7 @@ Example structure (NO other text/markdown outside this array):
 
         # After each job completes, check if all jobs for the assignment are done → compute insights
         try:
+            from insights import compute_insights
             assignment_id = job_data.get('assignmentId')
             teacher_id_for_insights = job_data.get('teacherId')
             if assignment_id and class_id:
@@ -661,7 +662,6 @@ Example structure (NO other text/markdown outside this array):
                 all_jobs = list(all_jobs_q.stream())
                 pending = [j for j in all_jobs if j.to_dict().get('status') not in ('complete', 'error')]
                 if not pending:
-                    from insights import compute_insights
                     genai_for_insights = _init_genai()
                     compute_insights(assignment_id, class_id, teacher_id_for_insights, genai_for_insights)
                     print(f"Insights computed for assignment {assignment_id}")

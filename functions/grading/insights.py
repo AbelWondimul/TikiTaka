@@ -2,6 +2,7 @@
 import json
 import statistics
 from firebase_admin import firestore
+from google.api_core.exceptions import AlreadyExists
 
 
 def _get_db():
@@ -17,11 +18,7 @@ def compute_insights(assignment_id: str, class_id: str, teacher_id: str, genai) 
     """
     db = _get_db()
 
-    # Idempotency: skip if already computed
     insight_ref = db.collection('assignmentInsights').document(assignment_id)
-    existing = insight_ref.get()
-    if existing.exists:
-        return existing.to_dict()
 
     # Fetch all complete jobs for this assignment
     jobs_q = (
@@ -45,7 +42,7 @@ def compute_insights(assignment_id: str, class_id: str, teacher_id: str, genai) 
     q_map = {}
     for job in jobs:
         for q in job.get('gradedQuestions', []):
-            qnum = q.get('questionNumber', '?')
+            qnum = str(q.get('questionNumber', '?'))
             if qnum not in q_map:
                 q_map[qnum] = {'scores': [], 'possible': q.get('pointsPossible', 1), 'feedback': [], 'text': ''}
             q_map[qnum]['scores'].append(q.get('pointsEarned', 0))
@@ -87,7 +84,10 @@ List up to 4 topics the teacher should re-teach. Return ONLY a JSON array of sho
         resp = model.generate_content(prompt)
         raw = resp.text.strip()
         if '```' in raw:
-            raw = raw.split('```')[1].strip()
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+            raw = raw.strip()
         suggested_topics = json.loads(raw)
         if not isinstance(suggested_topics, list):
             suggested_topics = []
@@ -107,5 +107,8 @@ List up to 4 topics the teacher should re-teach. Return ONLY a JSON array of sho
         'suggestedRetouchTopics': suggested_topics,
     }
 
-    insight_ref.set(insights)
+    try:
+        insight_ref.create(insights)
+    except AlreadyExists:
+        return insight_ref.get().to_dict()
     return insights
