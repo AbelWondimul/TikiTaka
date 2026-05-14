@@ -111,6 +111,19 @@ def _increment_usage():
     except Exception as e:
         print(f"Failed to increment usage stats: {e}")
 
+def _resize_for_gemini(img, max_side: int = 800, quality: int = 75) -> bytes:
+    """Resize PIL Image so its longest side <= max_side, return JPEG bytes."""
+    from PIL import Image
+    from io import BytesIO
+    w, h = img.size
+    if max(w, h) > max_side:
+        scale = max_side / max(w, h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
 # Heavy imports (fitz, PIL, genai) are done lazily inside functions
 # to avoid the 10-second deployment timeout.
 
@@ -130,6 +143,7 @@ def _init_genai():
     document="gradingJobs/{jobId}",
     timeout_sec=540,
     memory=options.MemoryOption.GB_1,
+    min_instances=1,
     secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
 )
 def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot | None]]) -> None:
@@ -242,7 +256,8 @@ Return your response as a JSON object with:
 
 Respond ONLY with the JSON, no markdown."""
 
-            model = _get_genai_model()
+            genai = _init_genai()
+            model = genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             response_text = response.text.strip()
             if response_text.startswith("```"):
@@ -404,11 +419,11 @@ Knowledge Base Context (Optional reference):
 """
         
         # Combine prompt and images into a single payload request
+        # Prompt caching: static content (rubric, KB, instructions) FIRST — images LAST.
+        # Gemini's implicit cache benefits from consistent leading content across requests.
         contents = [prompt]
         for p in page_images:
-            b = BytesIO()
-            p['img'].save(b, format="JPEG", quality=70)
-            img_data = b.getvalue()
+            img_data = _resize_for_gemini(p['img'], max_side=800, quality=75)
             contents.append({
                 "mime_type": "image/jpeg",
                 "data": img_data
@@ -919,11 +934,9 @@ Return ONLY a JSON block with this exact structure (no markdown fences, just sta
     contents = [prompt]
     from io import BytesIO
     for img in page_images:
-        b = BytesIO()
-        img.save(b, format="JPEG", quality=70)
         contents.append({
             "mime_type": "image/jpeg",
-            "data": b.getvalue()
+            "data": _resize_for_gemini(img, max_side=800, quality=75)
         })
 
     rubric = None
