@@ -537,6 +537,36 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Quiz Cache (NL prompt → generated questions, 24h TTL)
+    // Service-account writes only; teacher reads.
+    // ─────────────────────────────────────────
+    match /quizCache/{docId} {
+      allow read: if isTeacher();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Assignment Insights (post-grading analytics)
+    // Service-account writes; teacher and TAs read.
+    // ─────────────────────────────────────────
+    match /assignmentInsights/{assignmentId} {
+      allow read: if isAuthenticated() && (
+        (isTeacher() && resource.data.classId is string && isTeacherOfClass(resource.data.classId)) ||
+        (resource.data.classId is string && isTAofClass(resource.data.classId))
+      );
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Rate Limits (per-user counters for grading and quiz generation)
+    // Service-account writes; the owning user reads their own.
+    // ─────────────────────────────────────────
+    match /rateLimits/{uid}/{docId} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────
     // Backstop Deny — catches all unmatched document paths
     // ─────────────────────────────────────────
 

@@ -115,6 +115,16 @@ service firebase.storage {
       allow read: if isAuthenticated();
     }
 
+    match /assignment_pages/{classId}/{assignmentId}/{fileName} {
+      // Teacher who owns the class writes page images; enrolled students and TAs read.
+      allow write: if isTeacher()
+        && request.resource.size < 50 * 1024 * 1024
+        && isImageUpload();
+      allow read: if isAuthenticated() && (
+        isTeacher() || isEnrolledInClass(classId) || isTAofClass(classId)
+      );
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
