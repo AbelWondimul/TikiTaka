@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection } from 'firebase/firestore';
@@ -31,6 +31,18 @@ function SubmissionDetail() {
       </div>
     );
   }
+
+  const urlCache = useRef({});
+
+  const getOrFetchUrl = async (storagePath) => {
+    if (!storagePath) return null;
+    if (urlCache.current[storagePath]) return urlCache.current[storagePath];
+    const { ref: storageRef, getDownloadURL } = await import('firebase/storage');
+    const { storage } = await import('@/firebase');
+    const url = await getDownloadURL(storageRef(storage, storagePath));
+    urlCache.current[storagePath] = url;
+    return url;
+  };
 
   const [job, setJob] = useState(null);
   const [appealReason, setAppealReason] = useState('');
@@ -72,13 +84,7 @@ function SubmissionDetail() {
         
         if (data.resultPdfUrl) {
           try {
-             // resultPdfUrl is often relative like results/id.pdf
-             const fullPath = data.resultPdfUrl.startsWith('http') 
-                  ? data.resultPdfUrl 
-                  : `https://firebasestorage.googleapis.com/v0/b/${storage.app.options.storageBucket}/o/${encodeURIComponent(data.resultPdfUrl)}?alt=media`;
-             
-             // Wait, standard getDownloadURL is safer:
-             const url = await getDownloadURL(ref(storage, data.resultPdfUrl));
+             const url = await getOrFetchUrl(data.resultPdfUrl);
              setDownloadUrl(url);
           } catch (err) {
              console.error("Failed to load PDF URL:", err);
