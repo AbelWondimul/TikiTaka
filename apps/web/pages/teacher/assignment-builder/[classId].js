@@ -24,9 +24,9 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import BlockRenderer from '@/components/teacher/builder/BlockRenderer';
+import MathRenderer from '@/components/editor/MathRenderer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
@@ -86,10 +86,7 @@ function PreviewPanel({ blocks, title, previewMode }) {
         <div key={b.id} className="mb-4">
           {b.type === 'question' && (
             <div className="space-y-2">
-              <div
-                className="prose dark:prose-invert max-w-none text-sm"
-                dangerouslySetInnerHTML={{ __html: b.content || '<em>Empty question</em>' }}
-              />
+              <MathRenderer content={b.content || '<em>Empty question</em>'} className="prose dark:prose-invert max-w-none text-sm" />
               <div className="text-xs text-muted-foreground">{b.points} pt{b.points !== 1 ? 's' : ''}</div>
               {b.questionType === 'mcq' && b.options?.length ? (
                 <ul className="ml-4 space-y-1">
@@ -131,6 +128,7 @@ function AssignmentBuilderPage() {
   const [isPdfExtracting, setIsPdfExtracting] = useState(false);
   const assignmentIdRef = useRef(uuidv4());
   const autoSaveTimer = useRef(null);
+  const saveRef = useRef(null);
 
   // Load pre-generated blocks from QuickGenerateModal (via URL param)
   useEffect(() => {
@@ -151,15 +149,14 @@ function AssignmentBuilderPage() {
   );
 
   const handleDragEnd = ({ active, over }) => {
-    if (active.id !== over?.id) {
-      setBlocks(prev => {
-        const oldIdx = prev.findIndex(b => b.id === active.id);
-        const newIdx = prev.findIndex(b => b.id === over.id);
-        const reordered = arrayMove(prev, oldIdx, newIdx);
-        return reordered.map((b, i) => ({ ...b, order: i + 1 }));
-      });
-      scheduleSave();
-    }
+    if (!over || active.id === over.id) return;
+    setBlocks(prev => {
+      const oldIdx = prev.findIndex(b => b.id === active.id);
+      const newIdx = prev.findIndex(b => b.id === over.id);
+      const reordered = arrayMove(prev, oldIdx, newIdx);
+      return reordered.map((b, i) => ({ ...b, order: i + 1 }));
+    });
+    scheduleSave();
   };
 
   const addBlock = (type) => {
@@ -190,7 +187,7 @@ function AssignmentBuilderPage() {
   const scheduleSave = useCallback(() => {
     setSaveStatus('unsaved');
     clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => saveToFirestore('draft'), 2000);
+    autoSaveTimer.current = setTimeout(() => saveRef.current('draft'), 2000);
   }, []);
 
   const saveToFirestore = async (status = 'draft') => {
@@ -218,6 +215,7 @@ function AssignmentBuilderPage() {
     );
     setSaveStatus('saved');
   };
+  saveRef.current = saveToFirestore;
 
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -226,6 +224,11 @@ function AssignmentBuilderPage() {
     }, 30000);
     return () => clearInterval(interval);
   }, [saveStatus, blocks, title]);
+
+  // Clear debounce timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(autoSaveTimer.current);
+  }, []);
 
   const handlePublish = async () => {
     setIsPublishing(true);
