@@ -284,6 +284,22 @@ Respond ONLY with the JSON, no markdown."""
                 'progress_text': 'Grading complete.',
                 'completedAt': firestore.SERVER_TIMESTAMP
             })
+
+            # After each job completes, check if all jobs for the assignment are done → compute insights
+            try:
+                assignment_id = job_data.get('assignmentId')
+                teacher_id_for_insights = job_data.get('teacherId')
+                if assignment_id and class_id:
+                    all_jobs_q = _get_db().collection('gradingJobs').where('assignmentId', '==', assignment_id)
+                    all_jobs = list(all_jobs_q.stream())
+                    pending = [j for j in all_jobs if j.to_dict().get('status') not in ('complete', 'error')]
+                    if not pending:
+                        from insights import compute_insights
+                        genai_for_insights = _init_genai()
+                        compute_insights(assignment_id, class_id, teacher_id_for_insights, genai_for_insights)
+                        print(f"Insights computed for assignment {assignment_id}")
+            except Exception as insights_err:
+                print(f"Insights computation failed (non-fatal): {insights_err}")
             return
 
         # ── PDF SUBMISSION BRANCH ──
@@ -635,6 +651,22 @@ Example structure (NO other text/markdown outside this array):
             'progress_text': 'Grading complete.',
             'completedAt': firestore.SERVER_TIMESTAMP
         })
+
+        # After each job completes, check if all jobs for the assignment are done → compute insights
+        try:
+            assignment_id = job_data.get('assignmentId')
+            teacher_id_for_insights = job_data.get('teacherId')
+            if assignment_id and class_id:
+                all_jobs_q = _get_db().collection('gradingJobs').where('assignmentId', '==', assignment_id)
+                all_jobs = list(all_jobs_q.stream())
+                pending = [j for j in all_jobs if j.to_dict().get('status') not in ('complete', 'error')]
+                if not pending:
+                    from insights import compute_insights
+                    genai_for_insights = _init_genai()
+                    compute_insights(assignment_id, class_id, teacher_id_for_insights, genai_for_insights)
+                    print(f"Insights computed for assignment {assignment_id}")
+        except Exception as insights_err:
+            print(f"Insights computation failed (non-fatal): {insights_err}")
 
         _increment_usage()
 
