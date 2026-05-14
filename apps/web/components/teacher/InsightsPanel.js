@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TrendingDown, Users, Zap, BookOpen } from 'lucide-react';
 
-export default function InsightsPanel({ insights, classId, onGenerateRetouchQuiz }) {
+export default function InsightsPanel({ insights, onGenerateRetouchQuiz }) {
   const [expanded, setExpanded] = useState(true);
   if (!insights) return null;
 
@@ -93,7 +93,7 @@ export default function InsightsPanel({ insights, classId, onGenerateRetouchQuiz
                       {q.failRate}% fail rate
                     </Badge>
                   </div>
-                  {q.commonMistakes.length > 0 && (
+                  {q.commonMistakes?.length > 0 && (
                     <p className="text-xs text-muted-foreground">Common error: {q.commonMistakes[0]?.replace(/^[✓✗◯±]\s*/, '')}</p>
                   )}
                   <Button
