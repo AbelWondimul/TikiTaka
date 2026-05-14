@@ -1220,3 +1220,149 @@ Return ONLY the JSON object, no other text.
             "topics": []
         }
 
+
+# ---------------------------------------------------------------------------
+# generate_quick_content — HTTPS Callable
+# Natural-language prompt → assignment builder blocks
+# ---------------------------------------------------------------------------
+
+@https_fn.on_call(
+    timeout_sec=120,
+    memory=options.MemoryOption.MB_512,
+    secrets=["GOOGLEAI_KEY", "GEMINI_API_KEY"]
+)
+def generate_quick_content(req: https_fn.CallableRequest):
+    """
+    Accept a single natural-language prompt and return assignment builder blocks.
+    Input:  { classId, prompt, useKnowledgeBase, questionCount, difficulty, questionTypes }
+    Returns: { blocks: [...], title: str, totalPoints: int }
+    """
+    if req.auth is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Authentication required."
+        )
+
+    from validators import QuickGenerateInput
+    from pydantic import ValidationError as PydanticValidationError
+    from rate_limiter import check_teacher_quiz_gen_limit, increment_teacher_quiz_gen
+
+    teacher_id = req.auth.uid
+
+    try:
+        inp = QuickGenerateInput(**(req.data or {}))
+    except PydanticValidationError as ve:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message=str(ve)
+        )
+
+    # Rate limit: 20 generations per teacher per day
+    if not check_teacher_quiz_gen_limit(teacher_id, max_per_day=20):
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            message="Daily quiz generation limit reached (20/day). Try again tomorrow."
+        )
+
+    # Cache key: hash of prompt + classId + relevant params
+    cache_key_input = f"{inp.prompt}|{inp.classId}|{inp.questionCount}|{inp.difficulty}|{'|'.join(sorted(inp.questionTypes))}"
+    cache_hash = hashlib.md5(cache_key_input.encode()).hexdigest()
+
+    db = _get_db()
+
+    # Check 24-hour cache
+    cache_ref = db.collection('quizCache').document(cache_hash)
+    cache_snap = cache_ref.get()
+    if cache_snap.exists:
+        cached = cache_snap.to_dict()
+        cached_at = cached.get('createdAt')
+        if cached_at:
+            age = datetime.datetime.now(datetime.timezone.utc) - cached_at
+            if age.total_seconds() < 86400:
+                return cached.get('result')
+
+    # Fetch KB context (cap at 8000 chars to stay under token budget)
+    kb_text = ""
+    if inp.useKnowledgeBase:
+        kb_text = _get_kb_text(inp.classId, max_chars=8000)
+
+    genai = _init_genai()
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    question_types_str = ", ".join(inp.questionTypes) if inp.questionTypes else "mcq"
+
+    prompt_text = f"""You are a curriculum expert. The teacher typed: "{inp.prompt}"
+
+Parse that prompt to extract: topic, grade_level (default: "college"), question_count ({inp.questionCount}), difficulty ({inp.difficulty}), question_types ({question_types_str}).
+
+{"Use this course knowledge base as reference: " + kb_text if kb_text else "No knowledge base provided."}
+
+Generate exactly {inp.questionCount} question(s) of type(s): {question_types_str}.
+Difficulty: {inp.difficulty}.
+
+Return ONLY a JSON object (no markdown) with this schema:
+{{
+  "title": "Short descriptive title for this assignment (max 60 chars)",
+  "totalPoints": <sum of all question points>,
+  "blocks": [
+    {{
+      "id": "block_1",
+      "type": "question",
+      "order": 1,
+      "content": "<question text>",
+      "points": 1,
+      "questionType": "mcq",
+      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "answer": "A",
+      "hint": "one concise sentence",
+      "topic": "topic name"
+    }}
+  ]
+}}
+
+For short/long answer blocks, omit "options" and "answer" fields.
+Start with one divider block if there are multiple parts: {{"id": "div_1", "type": "divider", "order": 0, "content": "Part A"}}.
+Keep all block IDs unique. Use sequential order values starting from 1 (dividers can use 0).
+"""
+
+    result = None
+    last_error = None
+    for attempt in range(2):
+        try:
+            extra = '' if attempt == 0 else '\nCRITICAL: Return RAW JSON ONLY. No markdown fences.'
+            response = model.generate_content(prompt_text + extra)
+            json_str = response.text.strip()
+            if '```json' in json_str:
+                json_str = json_str.split('```json')[-1].split('```')[0].strip()
+            elif '```' in json_str:
+                json_str = json_str.split('```')[1].strip()
+            parsed = json.loads(json_str)
+            if 'blocks' not in parsed or 'title' not in parsed:
+                raise ValueError("Missing required fields: blocks, title")
+            result = parsed
+            break
+        except Exception as e:
+            last_error = e
+            print(f"generate_quick_content attempt {attempt + 1} failed: {e}")
+
+    if result is None:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INTERNAL,
+            message=f"Content generation failed after 2 attempts: {last_error}"
+        )
+
+    # Store in 24-hour cache (admin SDK bypasses Firestore rules)
+    try:
+        cache_ref.set({
+            'result': result,
+            'prompt': inp.prompt,
+            'classId': inp.classId,
+            'teacherId': teacher_id,
+            'createdAt': firestore.SERVER_TIMESTAMP
+        })
+    except Exception as e:
+        print(f"Cache write failed (non-fatal): {e}")
+
+    increment_teacher_quiz_gen(teacher_id)
+    _increment_usage()
+    return result
