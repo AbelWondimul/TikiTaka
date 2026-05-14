@@ -158,10 +158,32 @@ def grade_pdf(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Documen
         
     job_id = event.params["jobId"]
     job_data = after_data
-    
-    # Immediately update status to 'processing'
+
     _db = _get_db()
     job_ref = _db.collection('gradingJobs').document(job_id)
+
+    # Pydantic validation
+    try:
+        from validators import GradingJobData
+        from pydantic import ValidationError as PydanticValidationError
+        GradingJobData(**{k: job_data.get(k) for k in GradingJobData.model_fields})
+    except Exception as ve:
+        job_ref.update({'status': 'error', 'feedback': f'Invalid job data: {ve}'})
+        print(f"Validation error for job {job_id}: {ve}")
+        return
+
+    # Rate limit check
+    from rate_limiter import check_student_grading_limit
+    _student_id_rl = job_data.get('studentId', '')
+    _class_id_rl = job_data.get('classId', '')
+    if not check_student_grading_limit(_student_id_rl, _class_id_rl, max_active=10):
+        job_ref.update({
+            'status': 'error',
+            'feedback': 'Rate limit: too many active grading jobs. Wait for current submissions to finish.'
+        })
+        return
+
+    # Immediately update status to 'processing'
     job_ref.update({
         'status': 'processing',
         'progress': 0,
@@ -269,6 +291,9 @@ Respond ONLY with the JSON, no markdown."""
         from PIL import Image, ImageDraw  # lazy import
 
         pdf_bytes = blob.download_as_bytes()
+        MAX_PDF_BYTES = 50 * 1024 * 1024
+        if len(pdf_bytes) > MAX_PDF_BYTES:
+            raise Exception(f"PDF exceeds 50 MB limit ({len(pdf_bytes) / 1024 / 1024:.1f} MB). Submission rejected.")
         job_ref.update({'progress': 10, 'progress_text': 'Downloaded submission PDF.'})
         
         # 2. Fetch Knowledge Base Text (cached)
