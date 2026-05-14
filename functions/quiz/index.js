@@ -151,7 +151,11 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
     }
 
     // Set custom user claims
-    await admin.auth().setCustomUserClaims(uid, { role });
+    const customClaims = { role };
+    if (customClaims.role === 'teacher') {
+      customClaims.classIds = [];
+    }
+    await admin.auth().setCustomUserClaims(uid, customClaims);
 
     // Write the official user document
     await admin.firestore().collection("users").doc(uid).set({
@@ -480,5 +484,24 @@ exports.calendarFeed = functions.https.onRequest(async (req, res) => {
     console.error("Calendar feed error:", err);
     res.status(500).send("Internal server error.");
   }
+});
+
+exports.refreshTeacherClassClaim = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
+  }
+  const uid = context.auth.uid;
+  const role = context.auth.token.role;
+  if (role !== 'teacher') {
+    throw new functions.https.HttpsError('permission-denied', 'Teachers only.');
+  }
+
+  const classSnap = await admin.firestore().collection('classes').where('teacherId', '==', uid).get();
+  const classIds = classSnap.docs.map(d => d.id);
+
+  const currentClaims = context.auth.token;
+  const { iat, exp, aud, iss, sub, uid: _uid, firebase, ...existingClaims } = currentClaims;
+  await admin.auth().setCustomUserClaims(uid, { ...existingClaims, classIds });
+  return { classIds };
 });
 
