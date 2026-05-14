@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
@@ -45,6 +45,10 @@ function GradebookPage() {
 
   // Sort
   const [sortOrder, setSortOrder] = useState('asc');
+
+  // Pagination
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     if (classId && user) fetchAll();
@@ -320,6 +324,11 @@ function GradebookPage() {
     return sortOrder === 'asc' ? lastA.localeCompare(lastB) : lastB.localeCompare(lastA);
   });
 
+  const pagedStudents = useMemo(
+    () => sortedStudents.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [sortedStudents, page]
+  );
+
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   if (error) return (
     <div className="max-w-md mx-auto mt-12 p-6 space-y-4">
@@ -410,7 +419,7 @@ function GradebookPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedStudents.map(student => {
+                {pagedStudents.map(student => {
                   const overall = calcOverall(student.uid);
                   return (
                     <TableRow key={student.uid} className="hover:bg-muted/20">
@@ -517,6 +526,26 @@ function GradebookPage() {
                 })}
               </TableBody>
             </Table>
+            {sortedStudents.length > PAGE_SIZE && (
+              <div className="flex items-center justify-between mt-4 px-1">
+                <span className="text-sm text-muted-foreground">
+                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedStudents.length)} of {sortedStudents.length} students
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={(page + 1) * PAGE_SIZE >= sortedStudents.length}
+                    onClick={() => setPage(p => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
