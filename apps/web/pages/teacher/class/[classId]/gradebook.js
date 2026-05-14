@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
-  collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, serverTimestamp
+  collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -19,6 +19,8 @@ import {
   Loader2, ArrowLeft, Download, Save, CheckCircle, AlertTriangle, FileSpreadsheet
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import InsightsPanel from '@/components/teacher/InsightsPanel';
+import QuickGenerateModal from '@/components/teacher/QuickGenerateModal';
 
 function GradebookPage() {
   const router = useRouter();
@@ -50,9 +52,28 @@ function GradebookPage() {
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(0);
 
+  const [insights, setInsights] = useState(null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generatePrefill, setGeneratePrefill] = useState('');
+
   useEffect(() => {
     if (classId && user) fetchAll();
   }, [classId, user]);
+
+  useEffect(() => {
+    if (assignments.length > 0 && !selectedAssignmentId) {
+      setSelectedAssignmentId(assignments[0].id);
+    }
+  }, [assignments, selectedAssignmentId]);
+
+  useEffect(() => {
+    if (!selectedAssignmentId) return;
+    const unsub = onSnapshot(doc(db, 'assignmentInsights', selectedAssignmentId), snap => {
+      setInsights(snap.exists() ? snap.data() : null);
+    });
+    return () => unsub();
+  }, [selectedAssignmentId]);
 
   const fetchAll = async () => {
     setIsLoading(true);
@@ -382,6 +403,27 @@ function GradebookPage() {
             </Badge>
           )}
         </div>
+
+        <InsightsPanel
+          insights={insights}
+          classId={classId}
+          onGenerateRetouchQuiz={(question, topics) => {
+            const topicStr = topics.slice(0, 2).join(', ');
+            setGeneratePrefill(`Re-teaching quiz on ${question.questionId} mistakes${topicStr ? ` — topics: ${topicStr}` : ''}`);
+            setShowGenerateModal(true);
+          }}
+        />
+
+        <QuickGenerateModal
+          open={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          classId={classId}
+          prefill={generatePrefill}
+          onGenerated={(data) => {
+            const encoded = encodeURIComponent(JSON.stringify(data));
+            router.push(`/teacher/assignment-builder/${classId}?generated=${encoded}`);
+          }}
+        />
 
         {/* Gradebook Table */}
         {students.length === 0 || assignments.length === 0 ? (
