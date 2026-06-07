@@ -108,7 +108,7 @@ exports.submitQuiz = functions.https.onCall(async (data, context) => {
 // ---------------------------------------------------------------------------
 // onUserCreate — Auth trigger (kept from previous iteration)
 // ---------------------------------------------------------------------------
-exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+exports.onUserCreate = functions.runWith({ secrets: ["TEACHER_INVITE_TOKEN"] }).auth.user().onCreate(async (user) => {
   try {
     const uid = user.uid;
     const email = user.email || "";
@@ -139,9 +139,18 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
         await admin.auth().updateUser(uid, { displayName });
       }
 
-      // Use the role selected by the user during registration
-      if (payloadData.role === "teacher" || payloadData.role === "student") {
-        role = payloadData.role;
+      // Use the role selected by the user during registration.
+      // Teacher role requires a matching invite token to prevent self-promotion.
+      if (payloadData.role === "teacher") {
+        const expectedToken = process.env.TEACHER_INVITE_TOKEN;
+        if (expectedToken && payloadData.inviteToken === expectedToken) {
+          role = "teacher";
+        } else {
+          console.warn(`Teacher registration for ${uid} rejected — invalid or missing invite token.`);
+          role = "student";
+        }
+      } else if (payloadData.role === "student") {
+        role = "student";
       }
 
       // Clean up the temporary payload document

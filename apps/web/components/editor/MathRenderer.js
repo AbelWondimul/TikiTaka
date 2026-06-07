@@ -69,7 +69,8 @@ function renderMathInElement(element) {
 function sanitize(html) {
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ['span', 'div'],
-    ADD_ATTR: ['data-math', 'data-math-block', 'data-latex', 'latex', 'display', 'class', 'style'],
+    ADD_ATTR: ['data-math', 'data-math-block', 'data-latex', 'latex', 'display', 'class'],
+    FORBID_ATTR: ['style', 'onerror', 'onload'],
     ALLOW_ARIA_ATTR: true,
   });
 }

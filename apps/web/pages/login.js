@@ -22,6 +22,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [selectedRole, setSelectedRole] = useState('student');
+  const [inviteToken, setInviteToken] = useState('');
 
   useEffect(() => {
     // If already logged in, redirect
@@ -45,6 +46,7 @@ export default function Login() {
         await setDoc(doc(db, 'registration_payloads', googleUser.uid), {
           displayName: googleUser.displayName || googleUser.email,
           role: selectedRole,
+          inviteToken: selectedRole === 'teacher' ? inviteToken : undefined,
           timestamp: new Date().toISOString(),
         });
 
@@ -80,7 +82,8 @@ export default function Login() {
         await setDoc(doc(db, 'registration_payloads', userCredential.user.uid), {
           displayName: name,
           role: selectedRole,
-          timestamp: new Date().toISOString() 
+          inviteToken: selectedRole === 'teacher' ? inviteToken : undefined,
+          timestamp: new Date().toISOString()
         });
         
         setTimeout(() => {
@@ -108,17 +111,11 @@ export default function Login() {
     <>
       <Head>
         <title>{isLogin ? 'Sign In' : 'Join'} - TikiTaka AI</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
-        <style>{`
-          .headline-font { font-family: 'Manrope', sans-serif; }
-          body { font-family: 'Inter', sans-serif; background-color: #f7faf9; }
-          .dark body { background-color: #0f172a; }
-        `}</style>
       </Head>
-      <div className="flex flex-col min-h-screen bg-[#f7faf9] dark:bg-slate-950 text-[#181c1c] dark:text-slate-100">
+      <div className="flex flex-col min-h-screen bg-background text-foreground">
         
         {/* TopNavBar */}
-        <header className="w-full top-0 sticky z-50 bg-[#f7faf9] dark:bg-slate-900 border-b border-[#f1f4f3] dark:border-slate-800">
+        <header className="w-full top-0 sticky z-50 bg-background/95 backdrop-blur-sm border-b border-border">
           <div className="flex justify-between items-center px-6 md:px-12 py-6 max-w-[1440px] mx-auto">
             
             {/* The standard green/black Logo is here as requested */}
@@ -126,14 +123,14 @@ export default function Login() {
               <Logo className="scale-110" />
             </Link>
 
-            <nav className="hidden md:flex items-center gap-8 font-['Manrope'] tracking-tight">
+            <nav className="hidden md:flex items-center gap-8 tracking-tight">
             </nav>
-            <div className="flex items-center gap-6 font-['Manrope'] tracking-tight">
+            <div className="flex items-center gap-6 tracking-tight">
               <button 
                 onClick={() => setIsLogin(true)}
                 className={cn(
-                  "opacity-80 hover:text-[#006b5b] dark:hover:text-[#88f3da] transition-colors duration-300",
-                  isLogin ? "text-[#006b5b] font-semibold dark:text-[#88f3da]" : "text-[#181c1c] dark:text-slate-400"
+                  "opacity-80 hover:text-primary dark:hover:text-primary transition-colors duration-300",
+                  isLogin ? "text-primary font-semibold dark:text-primary" : "text-foreground dark:text-muted-foreground"
                 )}
               >
                 Sign In
@@ -142,7 +139,7 @@ export default function Login() {
                 onClick={() => setIsLogin(false)}
                 className={cn(
                   "font-semibold hover:scale-95 transition-transform duration-200",
-                  !isLogin ? "text-[#006b5b] dark:text-[#88f3da] border-b-2 border-[#006b5b] pb-0.5" : "text-[#181c1c] dark:text-slate-400 opacity-80"
+                  !isLogin ? "text-primary dark:text-primary border-b-2 border-primary pb-0.5" : "text-foreground dark:text-muted-foreground opacity-80"
                 )}
               >
                 Sign Up
@@ -153,15 +150,15 @@ export default function Login() {
 
         {/* Main Content Canvas */}
         <main className="flex-grow flex items-center justify-center px-6 py-20">
-          <div className="w-full max-w-lg bg-[#ffffff] dark:bg-slate-900 rounded-xl shadow-[0_20px_40px_rgba(24,28,28,0.06)] dark:shadow-none dark:border dark:border-slate-800 overflow-hidden">
+          <div className="w-full max-w-lg bg-card rounded-xl shadow-sm dark:border border-border overflow-hidden">
             <div className="p-10 md:p-14">
               
               {/* Header & Toggle */}
               <div className="text-center mb-10">
-                <h1 className="text-3xl font-extrabold headline-font text-[#003b5a] dark:text-white tracking-tight mb-4">
+                <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-4">
                   {isLogin ? 'Welcome Back' : 'Join TikiTaka'}
                 </h1>
-                <p className="text-[#41474e] dark:text-slate-400 font-['Inter'] text-sm mb-8">
+                <p className="text-muted-foreground text-sm mb-8">
                   {isLogin ? 'Sign in to access your dashboard.' : 'Start your journey into precision pedagogy.'}
                 </p>
                 
@@ -244,18 +241,31 @@ export default function Login() {
                 </div>
 
                 {!isLogin && (
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-4">
                     <div className="space-y-1.5">
                       <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1">I am a</label>
                       <select
                         value={selectedRole}
-                        onChange={(e) => setSelectedRole(e.target.value)}
+                        onChange={(e) => { setSelectedRole(e.target.value); setInviteToken(''); }}
                         className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white transition-all duration-300 rounded-t-lg outline-none"
                       >
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
                       </select>
                     </div>
+                    {selectedRole === 'teacher' && (
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold tracking-widest uppercase text-[#41474e] dark:text-slate-400 px-1">Teacher Invite Code</label>
+                        <input
+                          type="password"
+                          placeholder="Enter your invite code"
+                          value={inviteToken}
+                          onChange={(e) => setInviteToken(e.target.value)}
+                          required={selectedRole === 'teacher'}
+                          className="w-full bg-[#e0e3e2] dark:bg-slate-800 border-0 border-b-2 border-transparent focus:border-[#003b5a] dark:focus:border-[#88f3da] focus:ring-0 px-4 py-3.5 text-[#181c1c] dark:text-white placeholder:text-[#72787f] dark:placeholder:text-slate-500 transition-all duration-300 rounded-t-lg outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -263,7 +273,7 @@ export default function Login() {
                   <button 
                     type="submit" 
                     disabled={loading}
-                    className="w-full flex justify-center bg-[#006b5b] dark:bg-[#88f3da] text-[#ffffff] dark:text-[#00201a] py-4 px-6 rounded-lg headline-font font-bold tracking-tight hover:brightness-110 active:scale-95 transition-all duration-200"
+                    className="w-full flex justify-center bg-primary text-primary-foreground py-4 px-6 rounded-lg font-medium tracking-tight hover:brightness-110 active:scale-95 transition-all duration-200"
                   >
                     {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                     {isLogin ? 'Sign In' : 'Create Account'}
@@ -272,10 +282,10 @@ export default function Login() {
 
                 <div className="relative py-4">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-[#e0e3e2] dark:border-slate-700"></div>
+                    <div className="w-full border-t border-border"></div>
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="bg-white dark:bg-slate-900 px-4 text-[10px] font-bold uppercase tracking-widest text-[#72787f] dark:text-slate-500">or</span>
+                    <span className="bg-card px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">or</span>
                   </div>
                 </div>
 
@@ -283,7 +293,7 @@ export default function Login() {
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-[#e0e3e2] dark:border-slate-700 py-3.5 px-6 rounded-lg font-semibold text-sm text-[#181c1c] dark:text-white hover:bg-[#f1f4f3] dark:hover:bg-slate-700 active:scale-95 transition-all duration-200"
+                  className="w-full flex items-center justify-center gap-3 bg-card border border-border py-3.5 px-6 rounded-lg font-semibold text-sm text-foreground hover:bg-muted active:scale-95 transition-all duration-200"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

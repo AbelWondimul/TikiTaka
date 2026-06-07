@@ -46,14 +46,14 @@ export default function Header() {
         </Link>
         
         {role === 'teacher' && (
-          <nav className="hidden md:flex flex-1 items-center justify-center gap-8 font-['Manrope']">
-            <Link href="/teacher/dashboard" className="text-[#006b5b] dark:text-[#88f3da] font-bold border-b-2 border-[#006b5b] dark:border-[#88f3da] pb-1">
+          <nav className="hidden md:flex flex-1 items-center justify-center gap-8 font-sans">
+            <Link href="/teacher/dashboard" className="text-primary font-semibold border-b-2 border-primary pb-1">
               Dashboard
             </Link>
-            <Link href="/teacher/schedule" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
+            <Link href="/teacher/schedule" className="text-muted-foreground hover:text-primary font-medium transition-colors pb-1">
               Schedule
             </Link>
-            <Link href="/teacher/resources" className="text-slate-500 hover:text-[#006b5b] dark:text-slate-400 dark:hover:text-[#88f3da] font-medium transition-colors pb-1">
+            <Link href="/teacher/resources" className="text-muted-foreground hover:text-primary font-medium transition-colors pb-1">
               Resources
             </Link>
           </nav>

@@ -11,7 +11,7 @@ import Link from 'next/link';
 
 const MathRenderer = dynamic(() => import('@/components/editor/MathRenderer'), { ssr: false });
 
-export default function NotificationDropdown({ variant = 'default' }) {
+export default function NotificationDropdown() {
   const { user, role } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -277,27 +277,15 @@ export default function NotificationDropdown({ variant = 'default' }) {
     system: 'text-slate-600 bg-slate-50 dark:bg-slate-900/20 dark:text-slate-400',
   };
 
-  // Teacher dashboard uses material icons styling
-  const isMaterial = variant === 'material';
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        {isMaterial ? (
-          <button className="relative material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors">
-            notifications
-            {hasUnread && (
-              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-rose-500 rounded-full border-2 border-white" />
-            )}
-          </button>
-        ) : (
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-            <Bell className="h-5 w-5" />
-            {hasUnread && (
-              <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-primary rounded-full border-2 border-background" />
-            )}
-          </Button>
-        )}
+        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground h-9 w-9">
+          <Bell className="h-5 w-5" />
+          {hasUnread && (
+            <span className="absolute top-2 right-2 h-2 w-2 bg-primary rounded-full border-2 border-background" />
+          )}
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-96 p-0 rounded-xl shadow-xl border">
         {/* Header */}

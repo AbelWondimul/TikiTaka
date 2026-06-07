@@ -9,6 +9,30 @@ import { useTA } from '@/lib/useTA';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { generateClassCode } from '@/lib/classUtils';
+import {
+  Menu,
+  X,
+  Sun,
+  Moon,
+  HelpCircle,
+  School,
+  ArrowLeft,
+  Loader2,
+  Plus,
+  LayoutDashboard,
+  ClipboardList,
+  MessageSquare,
+  Users,
+  Settings
+} from 'lucide-react';
+
+const ICON_MAP = {
+  dashboard: LayoutDashboard,
+  assignment: ClipboardList,
+  chat: MessageSquare,
+  group: Users,
+  settings: Settings
+};
 
 const NAV_ITEMS = [
   { href: '/teacher/dashboard', label: 'Dashboard', key: 'dashboard' },
@@ -60,34 +84,27 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-        <style>{`
-          .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          }
-        `}</style>
       </Head>
 
       {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-md shadow-[0_1px_3px_rgba(17,24,39,0.06)] flex items-center justify-between px-4 sm:px-8 h-14 sm:h-16">
+      <header className="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-md shadow-[0_1px_3px_rgba(17,24,39,0.06)] flex items-center justify-between px-4 sm:px-8 h-14 sm:h-16 border-b border-border">
         <div className="flex items-center gap-4 sm:gap-12">
           {/* Mobile hamburger */}
           <button className="lg:hidden text-muted-foreground" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <span className="material-symbols-outlined">{sidebarOpen ? 'close' : 'menu'}</span>
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <Link href="/teacher/dashboard">
             <Logo />
           </Link>
-          <nav className="hidden md:flex items-center space-x-8 h-full font-['Manrope']">
+          <nav className="hidden md:flex items-center space-x-8 h-full font-sans">
             {NAV_ITEMS.map(item => (
               <Link
                 key={item.key}
                 href={item.href}
                 className={
                   activePage === item.key
-                    ? 'text-teal-700 dark:text-teal-300 font-bold border-b-2 border-teal-700 dark:border-teal-300 py-5 transition-colors duration-200'
-                    : 'text-muted-foreground font-medium py-5 hover:text-teal-600 dark:hover:text-teal-400 transition-colors duration-200'
+                    ? 'text-primary font-bold border-b-2 border-primary py-5 transition-colors duration-200'
+                    : 'text-muted-foreground font-medium py-5 hover:text-primary transition-colors duration-200'
                 }
               >
                 {item.label}
@@ -98,15 +115,19 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
         <div className="flex items-center space-x-3 sm:space-x-6">
           <div className="flex items-center space-x-2 sm:space-x-4 text-muted-foreground">
             <button
-              className="material-symbols-outlined cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+              className="cursor-pointer hover:text-primary transition-colors h-9 w-9 flex items-center justify-center rounded-md hover:bg-muted/50"
               onClick={() => {
                 const dark = document.documentElement.classList.toggle('dark');
                 localStorage.setItem('tikitaka-theme', dark ? 'dark' : 'light');
                 setIsDark(dark);
               }}
-            >{isDark ? 'light_mode' : 'dark_mode'}</button>
-            <NotificationDropdown variant="material" />
-            <a href="mailto:support@tikitaka.ai" title="Contact Support" className="material-symbols-outlined cursor-pointer hover:text-teal-600 transition-colors hidden sm:block">help</a>
+            >
+              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+            <NotificationDropdown />
+            <a href="mailto:support@tikitaka.ai" title="Contact Support" className="cursor-pointer hover:text-primary transition-colors hidden sm:flex h-9 w-9 items-center justify-center rounded-md hover:bg-muted/50">
+              <HelpCircle className="h-5 w-5" />
+            </a>
             <div className="h-8 w-8 rounded-full overflow-hidden bg-muted border border-border">
               {user?.photoURL ? (
                 <img className="w-full h-full object-cover" src={user.photoURL} alt="Profile" />
@@ -131,8 +152,8 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
       <aside className={`fixed left-0 top-14 sm:top-16 h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] w-64 bg-muted/50 flex flex-col p-4 space-y-2 border-r border-border z-40 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-4 py-4 sm:py-6 mb-2">
           <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-[#0f766e] rounded-lg flex items-center justify-center text-white">
-              <span className="material-symbols-outlined">school</span>
+            <div className="h-10 w-10 bg-primary rounded-lg flex items-center justify-center text-primary-foreground">
+              <School className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-teal-800 dark:text-teal-200 leading-none">{isStudentTA ? 'TA Dashboard' : 'Main Menu'}</h2>
@@ -141,24 +162,25 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
           </div>
         </div>
         <nav className="flex-1 space-y-1">
-          {SIDEBAR_ITEMS.map(item => (
-            <Link
-              key={item.key}
-              href={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={
-                activePage === item.key
-                  ? 'flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary font-bold shadow-sm rounded-lg border-l-4 border-primary transition-all duration-200'
-                  : 'flex items-center space-x-3 px-4 py-3 text-muted-foreground font-medium hover:bg-muted/50 hover:translate-x-1 transition-all duration-200'
-              }
-            >
-              <span
-                className="material-symbols-outlined"
-                style={activePage === item.key ? { fontVariationSettings: "'FILL' 1" } : undefined}
-              >{item.icon}</span>
-              <span className="text-sm tracking-normal">{item.label}</span>
-            </Link>
-          ))}
+          {SIDEBAR_ITEMS.map(item => {
+            const IconComponent = ICON_MAP[item.icon] || ClipboardList;
+            const isActive = activePage === item.key;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={
+                  isActive
+                    ? 'flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary font-bold shadow-sm rounded-lg border-l-4 border-primary transition-all duration-200'
+                    : 'flex items-center space-x-3 px-4 py-3 text-muted-foreground font-medium hover:bg-muted/50 hover:translate-x-1 transition-all duration-200'
+                }
+              >
+                <IconComponent className="h-5 w-5" />
+                <span className="text-sm tracking-normal">{item.label}</span>
+              </Link>
+            );
+          })}
 
           {/* Mobile-only nav items */}
           <div className="md:hidden pt-3 border-t border-border mt-3 space-y-1">
@@ -181,7 +203,7 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
         <div className="mt-auto pt-4 border-t border-border space-y-2">
           {isStudentTA ? (
             <Link href="/student/dashboard" className="w-full bg-violet-600 py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-violet-900/10">
-              <span className="material-symbols-outlined text-lg">arrow_back</span>
+              <ArrowLeft className="h-4 w-4" />
               <span>Back to Student</span>
             </Link>
           ) : (
@@ -190,7 +212,7 @@ export default function TeacherLayout({ children, activePage = 'dashboard' }) {
               disabled={isCreatingClass}
               className="w-full bg-primary py-3 px-4 rounded-lg text-white font-semibold text-sm flex items-center justify-center space-x-2 hover:brightness-110 active:scale-95 transition-transform shadow-lg shadow-teal-900/10 disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-lg">{isCreatingClass ? 'hourglass_empty' : 'add'}</span>
+              {isCreatingClass ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               <span>{isCreatingClass ? 'Creating...' : 'New Class'}</span>
             </button>
           )}

@@ -83,11 +83,10 @@ List up to 4 topics the teacher should re-teach. Return ONLY a JSON array of sho
     try:
         resp = model.generate_content(prompt)
         raw = resp.text.strip()
-        if '```' in raw:
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
-            raw = raw.strip()
+        if '```json' in raw.lower():
+            raw = raw.lower().split('```json', 1)[1].split('```')[0].strip()
+        elif '```' in raw:
+            raw = raw.split('```')[1].split('```')[0].strip()
         suggested_topics = json.loads(raw)
         if not isinstance(suggested_topics, list):
             suggested_topics = []

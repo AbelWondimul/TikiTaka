@@ -26,7 +26,24 @@ import {
   BookOpen,
   PlayCircle,
   Menu,
+  LayoutDashboard,
+  ClipboardList,
+  HelpCircle,
+  TrendingUp,
+  MessageSquare,
+  Settings,
+  User,
+  CheckCircle2,
 } from 'lucide-react';
+
+const ICON_MAP = {
+  dashboard: LayoutDashboard,
+  assignment: ClipboardList,
+  quiz: HelpCircle,
+  trending_up: TrendingUp,
+  chat: MessageSquare,
+  settings: Settings,
+};
 import {
   Sheet,
   SheetContent,
@@ -464,31 +481,31 @@ function StudentQuiz() {
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
   return (
-    <div className="font-['Inter'] text-slate-900 bg-[#F9FAFB] min-h-[max(884px,100dvh)]">
+    <div className="text-foreground bg-background min-h-screen font-sans">
       <Head>
         <title>Quiz Interface - TikiTaka</title>
       </Head>
 
       {/* TopAppBar */}
-      <header className="fixed top-0 w-full z-50 bg-white/85 backdrop-blur-md shadow-sm">
+      <header className="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-md shadow-sm border-b border-border">
         <div className="flex items-center justify-between px-6 py-4 w-full max-w-none">
           <div className="flex items-center gap-3">
             <Sheet>
               <SheetTrigger asChild>
-                <button className="text-teal-800 hover:opacity-80 transition-opacity">
+                <button className="text-primary hover:opacity-80 transition-opacity">
                   <Menu className="w-6 h-6" />
                 </button>
               </SheetTrigger>
               <SheetContent side="left" className="w-[300px] p-0 border-r-0">
-                <div className="flex flex-col h-full bg-surface">
-                  <div className="px-6 py-8 border-b border-slate-100">
+                <div className="flex flex-col h-full bg-card">
+                  <div className="px-6 py-8 border-b border-border">
                     <div className="flex items-center space-x-3 mb-6">
-                      <div className="h-10 w-10 bg-[#0f766e] rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                      <div className="h-10 w-10 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold text-xl">
                         T
                       </div>
                       <div>
-                        <h2 className="text-lg font-bold text-teal-800 leading-none">Main Menu</h2>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mt-1">Navigation</p>
+                        <h2 className="text-lg font-bold text-foreground leading-none">Main Menu</h2>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mt-1">Navigation</p>
                       </div>
                     </div>
                   </div>
@@ -499,17 +516,20 @@ function StudentQuiz() {
                       { name: 'Quizzes', icon: 'quiz', href: '/student/quizzes' },
                       { name: 'Progress', icon: 'trending_up', href: '/student/progress' },
                       { name: 'Messages', icon: 'chat', href: '/student/messages' },
-                    ].map((item, idx) => (
-                      <a key={idx} href={item.href} className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
-                        <span className="material-symbols-outlined">{item.icon}</span>
-                        <span className="text-sm tracking-normal">{item.name}</span>
-                      </a>
-                    ))}
+                    ].map((item, idx) => {
+                      const IconComp = ICON_MAP[item.icon] || HelpCircle;
+                      return (
+                        <a key={idx} href={item.href} className="flex items-center space-x-4 px-4 py-3 text-muted-foreground font-medium hover:bg-accent hover:text-foreground rounded-xl transition-all duration-200">
+                          <IconComp className="h-5 w-5" />
+                          <span className="text-sm tracking-normal">{item.name}</span>
+                        </a>
+                      );
+                    })}
 
-                    <div className="my-4 border-t border-slate-100"></div>
+                    <div className="my-4 border-t border-border"></div>
 
-                    <a href="/student/settings" className="flex items-center space-x-4 px-4 py-3 text-slate-600 font-medium hover:bg-slate-100 hover:text-teal-700 rounded-xl transition-all duration-200">
-                      <span className="material-symbols-outlined">settings</span>
+                    <a href="/student/settings" className="flex items-center space-x-4 px-4 py-3 text-muted-foreground font-medium hover:bg-accent hover:text-foreground rounded-xl transition-all duration-200">
+                      <Settings className="h-5 w-5" />
                       <span className="text-sm tracking-normal">Settings</span>
                     </a>
                   </nav>
@@ -517,15 +537,15 @@ function StudentQuiz() {
               </SheetContent>
             </Sheet>
 
-            <h1 className="font-['Inter'] font-bold tracking-tight text-2xl font-extrabold tracking-[-1.5px] select-none cursor-pointer" onClick={() => router.push('/student/dashboard')}>
-              <span className="text-slate-900">Tiki</span><span className="text-[#0F766E]">Taka</span>
+            <h1 className="font-sans font-bold tracking-tight text-2xl font-extrabold tracking-[-1.5px] select-none cursor-pointer" onClick={() => router.push('/student/dashboard')}>
+              <span className="text-foreground">Tiki</span><span className="text-primary">Taka</span>
             </h1>
           </div>
-          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-border overflow-hidden">
             {user?.photoURL ? (
               <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
             ) : (
-              <span className="material-symbols-outlined text-slate-500">person</span>
+              <User className="text-muted-foreground h-5 w-5" />
             )}
           </div>
         </div>
@@ -535,31 +555,31 @@ function StudentQuiz() {
       <main className="pt-24 pb-32 px-4 max-w-[640px] mx-auto min-h-screen flex flex-col gap-6">
         
         {/* QUIZ CONTEXT CARD */}
-        <section className="bg-white p-5 rounded-xl flex items-center justify-between shadow-[0_4px_16px_rgba(17,24,39,0.04)]">
+        <section className="bg-card border border-border p-5 rounded-xl flex items-center justify-between shadow-sm">
           <div className="flex flex-col">
-            <span className="font-label text-[11px] font-bold uppercase tracking-[0.8px] text-slate-500 mb-1">Current Course</span>
-            <h2 className="text-slate-900 font-headline font-bold text-[16px]">{className || 'Practice Quiz'}</h2>
+            <span className="font-sans text-[11px] font-bold uppercase tracking-[0.8px] text-muted-foreground mb-1">Current Course</span>
+            <h2 className="text-foreground font-sans font-bold text-[16px]">{className || 'Practice Quiz'}</h2>
           </div>
           <div className="relative flex items-center justify-center">
             {/* Circular Progress Indicator */}
             <svg className="w-12 h-12 transform -rotate-90">
-              <circle className="text-slate-100" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeWidth="4"></circle>
-              <circle className="text-[#0f766e] transition-all duration-500 ease-out" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeWidth="4"></circle>
+              <circle className="text-muted" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeWidth="4"></circle>
+              <circle className="text-primary transition-all duration-500 ease-out" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeWidth="4"></circle>
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[10px] font-bold text-slate-900">{currentIndex + 1}/{questions.length}</span>
+              <span className="text-[10px] font-bold text-foreground">{currentIndex + 1}/{questions.length}</span>
             </div>
           </div>
         </section>
 
         {/* QUESTION CARD */}
         {currentQuestion && (
-          <section className="bg-white p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)]">
+          <section className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <div className="mb-8">
-              <span className="font-label text-[11px] font-bold uppercase tracking-[0.8px] text-[#005c55] mb-2 block">
+              <span className="font-sans text-[11px] font-bold uppercase tracking-[0.8px] text-primary mb-2 block">
                 Question {String(currentIndex + 1).padStart(2, '0')}
               </span>
-              <h3 className="text-slate-900 font-headline font-bold text-[20px] leading-tight tracking-[-0.5px]">
+              <h3 className="text-foreground font-sans font-bold text-[20px] leading-tight tracking-[-0.5px]">
                 {currentQuestion.question}
               </h3>
             </div>
@@ -575,11 +595,11 @@ function StudentQuiz() {
                     <button
                       key={optIdx}
                       type="button"
-                      className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-teal-50 border border-[#0f766e]/20 text-slate-900 w-full text-left transition-all active:scale-[0.98]"
+                      className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-primary/10 border border-primary/20 text-foreground w-full text-left transition-all active:scale-[0.98]"
                     >
-                      <div className="w-6 h-6 rounded-full bg-[#0f766e] shrink-0 flex items-center justify-center text-white text-[12px] font-bold">{letter}</div>
+                      <div className="w-6 h-6 rounded-full bg-primary shrink-0 flex items-center justify-center text-primary-foreground text-[12px] font-bold">{letter}</div>
                       <span className="text-[14px] font-semibold leading-snug">{option}</span>
-                      <span className="material-symbols-outlined ml-auto text-[#0f766e] text-[20px] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      <CheckCircle2 className="ml-auto text-primary h-5 w-5 shrink-0" />
                     </button>
                   );
                 }
@@ -589,9 +609,9 @@ function StudentQuiz() {
                     key={optIdx}
                     type="button"
                     onClick={() => handleSelectAnswer(letter)}
-                    className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-slate-50 border border-transparent text-slate-900 w-full text-left transition-all hover:bg-slate-100 active:scale-[0.98]"
+                    className="flex items-center gap-4 min-h-[44px] py-2 px-4 rounded-lg bg-muted/40 border border-transparent text-foreground w-full text-left transition-all hover:bg-muted/70 active:scale-[0.98]"
                   >
-                    <div className="w-6 h-6 rounded-full bg-slate-200 shrink-0 flex items-center justify-center text-slate-600 text-[12px] font-bold">{letter}</div>
+                    <div className="w-6 h-6 rounded-full bg-muted shrink-0 flex items-center justify-center text-muted-foreground text-[12px] font-bold">{letter}</div>
                     <span className="text-[14px] font-medium leading-snug">{option}</span>
                   </button>
                 );
@@ -602,9 +622,9 @@ function StudentQuiz() {
 
         {/* Contextual Hint / Info */}
         {currentQuestion && currentQuestion.hint && (
-          <div className="bg-[#f3f4f5] p-4 rounded-xl flex items-start gap-3">
-            <span className="material-symbols-outlined text-slate-400 text-[20px] shrink-0">lightbulb</span>
-            <p className="text-[13px] text-[#3e4947] italic">
+          <div className="bg-muted p-4 rounded-xl flex items-start gap-3">
+            <Lightbulb className="text-muted-foreground h-5 w-5 shrink-0" />
+            <p className="text-[13px] text-muted-foreground italic">
               {currentQuestion.hint}
             </p>
           </div>
@@ -612,18 +632,18 @@ function StudentQuiz() {
       </main>
 
       {/* BottomNavBar */}
-      <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-white shadow-[0_-4px_16px_rgba(17,24,39,0.04)] z-50">
+      <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-card border-t border-border shadow-sm z-50">
         
         {/* Previous Button */}
         <button
           onClick={handlePrev}
           disabled={currentIndex === 0}
           className={cn(
-            "flex flex-col items-center justify-center px-8 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px]",
-            currentIndex === 0 ? "text-slate-300 cursor-not-allowed opacity-50" : "text-slate-400 hover:text-slate-600"
+            "flex flex-col items-center justify-center px-8 py-2 active:scale-98 transition-all font-sans text-[11px] font-bold uppercase tracking-[0.8px]",
+            currentIndex === 0 ? "text-muted/50 cursor-not-allowed opacity-50" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <span className="material-symbols-outlined mb-1">arrow_back</span>
+          <ArrowLeft className="h-4 w-4 mb-1" />
           Previous
         </button>
         
@@ -633,11 +653,11 @@ function StudentQuiz() {
             onClick={handleSubmit}
             disabled={!allAnswered}
             className={cn(
-              "flex flex-col items-center justify-center bg-[#0f766e] text-white rounded-xl px-12 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px] shadow-lg shadow-teal-900/10",
+              "flex flex-col items-center justify-center bg-primary text-primary-foreground rounded-xl px-12 py-2 active:scale-98 transition-all font-sans text-[11px] font-bold uppercase tracking-[0.8px] shadow-sm",
               !allAnswered && "opacity-50 cursor-not-allowed"
             )}
           >
-            <span className="material-symbols-outlined mb-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+            <CheckCircle2 className="h-4 w-4 mb-1" />
             Submit
           </button>
         ) : (
@@ -645,11 +665,11 @@ function StudentQuiz() {
             onClick={handleNext}
             disabled={!currentAnswer}
             className={cn(
-               "flex flex-col items-center justify-center bg-[#0f766e] text-white rounded-xl px-12 py-2 active:scale-98 transition-all font-['Inter'] text-[11px] font-bold uppercase tracking-[0.8px] shadow-lg shadow-teal-900/10",
+               "flex flex-col items-center justify-center bg-primary text-primary-foreground rounded-xl px-12 py-2 active:scale-98 transition-all font-sans text-[11px] font-bold uppercase tracking-[0.8px] shadow-sm",
                !currentAnswer && "opacity-50 cursor-not-allowed"
             )}
           >
-            <span className="material-symbols-outlined mb-1" style={{ fontVariationSettings: "'FILL' 1" }}>arrow_forward</span>
+            <ArrowRight className="h-4 w-4 mb-1" />
             Next
           </button>
         )}

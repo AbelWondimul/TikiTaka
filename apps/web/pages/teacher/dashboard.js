@@ -9,6 +9,18 @@ import { useAuth } from '@/lib/auth-context';
 import { withAuth } from '@/components/layout/with-auth';
 import TeacherLayout from '@/components/layout/TeacherLayout';
 import { generateClassCode, getAccessibleClasses } from '@/lib/classUtils';
+import {
+  School,
+  BarChart3,
+  MoreVertical,
+  Copy,
+  Edit,
+  Lock,
+  Unlock,
+  Archive,
+  Trash2
+} from 'lucide-react';
+
 import { getRelativeTime } from '@/lib/dateUtils';
 
 // Convert user's name format to "Good morning, Professor [Lastname]"
@@ -294,7 +306,7 @@ function TeacherDashboard() {
               ) : classes.length === 0 ? (
                  <div className="col-span-full bg-card p-12 text-center rounded-xl border border-dashed border-border space-y-4">
                     <div className="h-16 w-16 mx-auto bg-teal-50 dark:bg-teal-950 rounded-2xl flex items-center justify-center">
-                      <span className="material-symbols-outlined text-teal-600 dark:text-teal-400 text-3xl">school</span>
+                      <School className="text-teal-600 dark:text-teal-400 h-8 w-8" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-foreground">Welcome to TikiTaka!</h3>
@@ -309,8 +321,8 @@ function TeacherDashboard() {
                     </div>
                  </div>
               ) : (
-                classes.filter(c => !c.archived).map((c) => (
-                  <div key={c.id} className="bg-card p-6 rounded-xl shadow-[0_4px_16px_rgba(17,24,39,0.04)] hover:shadow-lg transition-shadow duration-200 flex flex-col relative">
+                 classes.filter(c => !c.archived).map((c) => (
+                  <div key={c.id} className="bg-card p-6 rounded-xl shadow-sm border hover:shadow-md transition-shadow duration-200 flex flex-col relative">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-1.5">
                         <span className="bg-muted text-muted-foreground px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider uppercase">
@@ -320,18 +332,22 @@ function TeacherDashboard() {
                           <span className="bg-violet-100 text-violet-700 px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase">TA</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span
-                          className="material-symbols-outlined text-muted-foreground/50 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors text-[20px]"
+                      <div className="flex items-center gap-2">
+                        <button
                           title="Analytics"
                           onClick={() => router.push(`/teacher/class/${c.id}/analytics`)}
-                        >bar_chart</span>
+                          className="p-1 rounded-md text-muted-foreground/50 hover:text-primary hover:bg-muted/50 transition-colors h-7 w-7 flex items-center justify-center"
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </button>
                         {!c._isTA && (
                         <div className="relative" ref={openMenuId === c.id ? menuRef : null}>
-                          <span
-                            className="material-symbols-outlined text-muted-foreground/50 cursor-pointer hover:text-muted-foreground"
+                          <button
+                            className="p-1 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors h-7 w-7 flex items-center justify-center"
                             onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === c.id ? null : c.id); }}
-                          >more_vert</span>
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
 
                           {openMenuId === c.id && (
                             <div className="absolute right-0 top-8 z-50 w-52 bg-card rounded-lg shadow-xl border border-border py-1 dark:shadow-2xl animate-in fade-in zoom-in-95 duration-150">
@@ -339,43 +355,43 @@ function TeacherDashboard() {
                                 className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { handleCopyCode(c.classCode, c.id); }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                                <Copy className="h-4 w-4 text-muted-foreground" />
                                 Copy Invite Code
                               </button>
                               <button
                                 className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); setOpenMenuId(null); }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                <Edit className="h-4 w-4 text-muted-foreground" />
                                 Edit Name
                               </button>
                               <button
                                 className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => handleToggleInvites(c)}
                               >
-                                <span className="material-symbols-outlined text-[18px]">{c.invitesDisabled ? 'lock_open' : 'lock'}</span>
+                                {c.invitesDisabled ? <Unlock className="h-4 w-4 text-muted-foreground" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
                                 {c.invitesDisabled ? 'Enable Invites' : 'Close Invites'}
                               </button>
                               <button
                                 className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => handleCloneClass(c)}
                               >
-                                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                                <Copy className="h-4 w-4 text-muted-foreground" />
                                 Clone Class
                               </button>
                               <button
                                 className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted flex items-center gap-3 transition-colors"
                                 onClick={() => { setArchiveConfirmId(c.id); setOpenMenuId(null); }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                                <Archive className="h-4 w-4 text-muted-foreground" />
                                 Archive Class
                               </button>
                               <div className="border-t border-border my-1" />
                               <button
-                                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                                className="w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 flex items-center gap-3 transition-colors"
                                 onClick={() => { setDeleteConfirmId(c.id); setOpenMenuId(null); }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                                <Trash2 className="h-4 w-4" />
                                 Delete Class
                               </button>
                             </div>

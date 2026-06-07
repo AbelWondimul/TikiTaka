@@ -217,13 +217,13 @@ function AssignmentBuilderPage() {
   };
   saveRef.current = saveToFirestore;
 
-  // Auto-save every 30 seconds
+  // Auto-save every 30 seconds — use saveRef to avoid stale closure
   useEffect(() => {
     const interval = setInterval(() => {
-      if (saveStatus === 'unsaved') saveToFirestore('draft');
+      if (saveStatus === 'unsaved') saveRef.current('draft');
     }, 30000);
     return () => clearInterval(interval);
-  }, [saveStatus, blocks, title]);
+  }, [saveStatus]);
 
   // Clear debounce timer on unmount
   useEffect(() => {

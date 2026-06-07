@@ -30,8 +30,7 @@ service firebase.storage {
     // permitted because some browsers/SDKs upload PDFs without a content-type.
     function isPdfUpload() {
       return request.resource.contentType == 'application/pdf'
-        || request.resource.contentType == 'application/octet-stream'
-        || request.resource.contentType == null;
+        || request.resource.contentType == 'application/octet-stream';
     }
 
     function isVideoUpload() {

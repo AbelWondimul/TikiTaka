@@ -473,8 +473,8 @@ Knowledge Base Context (Optional reference):
             except Exception:
                 model_pro = model # Fallback to Flash if unavailable
         elif low_confidence_questions:
-            print(f"edge_case_skip: {len(low_confidence_questions)} low-confidence question(s) below threshold, skipping Pro re-eval")
-                
+            print(f"edge_case_skip: {len(low_confidence_questions)} low-confidence question(s) below threshold, using Flash re-eval")
+            model_pro = model
             edge_case_prompt = f"""
 In this iteration, you are handling difficult edge cases in a student's submitted homework PDF.
 Certain questions were flagged as low confidence because they may be illegible, messy, drawn, blank, or misplaced.
@@ -893,6 +893,22 @@ def generate_rubric(req: https_fn.CallableRequest):
         raise https_fn.HttpsError(
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             message="classId and rawPdfPath are required."
+        )
+
+    # Verify caller owns or is TA of the class before reading any Storage object
+    class_doc = _get_db().collection('classes').document(class_id).get()
+    if not class_doc.exists:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.NOT_FOUND,
+            message="Class not found."
+        )
+    class_data = class_doc.to_dict()
+    is_owner = class_data.get('teacherId') == req.auth.uid
+    is_ta = req.auth.uid in class_data.get('taIds', [])
+    if not is_owner and not is_ta:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            message="You do not have access to this class."
         )
 
     # 1. Download and Render PDF to Images

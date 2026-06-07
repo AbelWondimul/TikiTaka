@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TrendingDown, Users, Zap, BookOpen } from 'lucide-react';
 
-export default function InsightsPanel({ insights, onGenerateRetouchQuiz }) {
+export default function InsightsPanel({ insights, onGenerateRetouchQuiz = () => {} }) {
   const [expanded, setExpanded] = useState(true);
   if (!insights) return null;
 

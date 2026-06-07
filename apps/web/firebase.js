@@ -1,8 +1,8 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getFunctions } from "firebase/functions";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,18 +17,36 @@ const firebaseConfig = {
 // if env vars aren't provided (e.g., during GitHub Actions static build).
 let app, auth, db, storage, functions;
 
+const connectToEmulators = (authInstance, dbInstance, storageInstance, functionsInstance) => {
+  if (process.env.NEXT_PUBLIC_USE_EMULATORS === 'true' && typeof window !== 'undefined') {
+    if (global._firebaseEmulatorsConnected) return;
+    try {
+      connectAuthEmulator(authInstance, 'http://localhost:9099', { disableWarnings: true });
+      connectFirestoreEmulator(dbInstance, 'localhost', 8081);
+      connectStorageEmulator(storageInstance, 'localhost', 9199);
+      connectFunctionsEmulator(functionsInstance, 'localhost', 5001);
+      global._firebaseEmulatorsConnected = true;
+      console.log('Successfully connected to Firebase Emulators');
+    } catch (e) {
+      console.warn("Firebase emulators already connected or failed to connect:", e);
+    }
+  }
+};
+
 if (typeof window !== "undefined" && !getApps().length && firebaseConfig.apiKey) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
   functions = getFunctions(app);
+  connectToEmulators(auth, db, storage, functions);
 } else if (getApps().length > 0) {
   app = getApp();
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
   functions = getFunctions(app);
+  connectToEmulators(auth, db, storage, functions);
 }
 
 export { app, auth, db, storage, functions };

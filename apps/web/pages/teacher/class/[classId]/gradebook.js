@@ -27,10 +27,6 @@ function GradebookPage() {
   const { classId } = router.query;
   const { user } = useAuth();
 
-  if (!router.isReady) {
-    return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
-  }
-
   const [classData, setClassData] = useState(null);
   const [students, setStudents] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -350,7 +346,7 @@ function GradebookPage() {
     [sortedStudents, page]
   );
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+  if (!router.isReady || isLoading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   if (error) return (
     <div className="max-w-md mx-auto mt-12 p-6 space-y-4">
       <p className="text-destructive font-medium">{error}</p>

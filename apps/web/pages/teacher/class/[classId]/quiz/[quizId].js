@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { withAuth } from '@/components/layout/with-auth';
 import { db } from '@/firebase';
 import { doc, getDoc, getDocs, query, collection, where, orderBy } from 'firebase/firestore';
 import { 
@@ -15,19 +16,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
-export default function QuizPerformancePage() {
+function QuizPerformancePage() {
   const router = useRouter();
   const { classId, quizId } = router.query;
   const { user } = useAuth();
-
-  // Don't render until router params are available (required for static export)
-  if (!router.isReady) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   const [quiz, setQuiz] = useState(null);
   const [attempts, setAttempts] = useState([]);
@@ -100,10 +92,10 @@ export default function QuizPerformancePage() {
     fetchData();
   }, [classId, quizId, user]);
 
-  if (loading) {
+  if (!router.isReady || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <ArrowLeft className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -418,3 +410,5 @@ export default function QuizPerformancePage() {
     </div>
   );
 }
+
+export default withAuth(QuizPerformancePage, ['teacher', 'ta']);
